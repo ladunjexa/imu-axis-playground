@@ -1,0 +1,2216 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>IMU Axis Playground</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: instrument bench - 3D view with tabbed activities under it (left), sticky live readout with plain-words summary and graphs (right) */
+:root {
+  --paper: #f3f6f8; --panel: #ffffff; --ink: #17212b; --muted: #5b6875; --line: #d5dde4; --soft: #e8eef3; --grid: #c3cfd9;
+  --accent: #b86b00; --grav: #6b4fb3;
+  --x: #cf3b3b; --y: #23864f; --z: #2a62c9;
+  --ok: #23864f; --warn: #b86b00; --alert: #cf3b3b;
+  --pcb: #1f6b4a; --chip: #1b1e22; --skin: #d9c7b8; --cloth: #8fa3b5; --table: #b8a48c;
+  --display: "Barlow Condensed", "Arial Narrow", "Helvetica Neue", Arial, sans-serif;
+  --body: "IBM Plex Sans", -apple-system, "Segoe UI", Roboto, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #10161c; --panel: #172029; --ink: #e6edf3; --muted: #95a3b1; --line: #2a3643; --soft: #1e2934; --grid: #2c3a47;
+    --accent: #f0a63a; --grav: #a98cf0; --x: #ff6b6b; --y: #4fd18b; --z: #6ea2ff;
+    --ok: #4fd18b; --warn: #f0a63a; --alert: #ff6b6b; --pcb: #237a55; --chip: #0b0d10; --skin: #8d7b6d; --cloth: #4d6274; --table: #6e5e4c;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #10161c; --panel: #172029; --ink: #e6edf3; --muted: #95a3b1; --line: #2a3643; --soft: #1e2934; --grid: #2c3a47;
+  --accent: #f0a63a; --grav: #a98cf0; --x: #ff6b6b; --y: #4fd18b; --z: #6ea2ff;
+  --ok: #4fd18b; --warn: #f0a63a; --alert: #ff6b6b; --pcb: #237a55; --chip: #0b0d10; --skin: #8d7b6d; --cloth: #4d6274; --table: #6e5e4c;
+  color-scheme: dark;
+}
+
+[hidden] { display: none !important; }
+body { background: var(--paper); color: var(--ink); font-family: var(--body); font-size: 15px; line-height: 1.55; }
+.page { max-width: 1240px; margin: 0 auto; padding-inline: 20px; padding-block: 24px 56px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 22px; }
+.page > * { min-width: 0; }
+
+header h1 { font-family: var(--display); font-weight: 700; font-size: clamp(30px, 4.4vw, 44px); letter-spacing: .01em; line-height: 1.05; margin: 0; }
+header p { margin: 6px 0 0; color: var(--muted); max-width: 70ch; }
+.key { display: flex; gap: 14px; flex-wrap: wrap; margin-top: 10px; font-family: var(--mono); font-size: 12.5px; }
+.key span { display: inline-flex; align-items: center; gap: 6px; }
+.key i { width: 18px; height: 4px; border-radius: 2px; display: inline-block; }
+.key i.dot { width: 10px; height: 10px; border-radius: 50%; }
+
+.bench { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 20px; align-items: start; }
+.bench > * { min-width: 0; }
+@media (max-width: 920px) { .bench { grid-template-columns: minmax(0, 1fr); } }
+.left { display: grid; gap: 14px; }
+.left > * { min-width: 0; }
+
+.view { position: relative; aspect-ratio: 16 / 11; max-width: 100%; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; touch-action: none; cursor: grab;
+  background: linear-gradient(var(--soft) 1px, transparent 1px) 0 0 / 24px 24px, linear-gradient(90deg, var(--soft) 1px, transparent 1px) 0 0 / 24px 24px, var(--panel); }
+.view:active { cursor: grabbing; }
+.view canvas { display: block; width: 100%; height: 100%; }
+.caption { position: absolute; left: 12px; right: 12px; bottom: 10px; font-family: var(--mono); font-size: 13px; pointer-events: none; text-shadow: 0 0 6px var(--panel), 0 0 2px var(--panel); }
+.viewbar { position: absolute; right: 10px; top: 10px; display: flex; gap: 6px; }
+.viewbar button { padding: 6px 10px; font-size: 13px; }
+.hint { position: absolute; left: 12px; top: 12px; font-size: 12px; color: var(--muted); pointer-events: none; }
+@media (max-width: 560px) { .view { aspect-ratio: 1 / 1; } }
+
+button { font: 500 14px/1.1 var(--body); color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 7px; padding: 9px 12px; cursor: pointer; }
+button:hover { border-color: var(--muted); }
+button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 2px solid var(--z); outline-offset: 2px; }
+button.primary { background: var(--ink); color: var(--panel); border-color: var(--ink); }
+button[data-axis="x"] { border-bottom: 3px solid var(--x); }
+button[data-axis="y"] { border-bottom: 3px solid var(--y); }
+button[data-axis="z"] { border-bottom: 3px solid var(--z); }
+button[aria-pressed="true"] { background: var(--soft); border-color: var(--ink); }
+
+/* tabs */
+.tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+.tabs button { border: 0; border-radius: 7px 7px 0 0; background: transparent; font-family: var(--display); font-weight: 600; font-size: 18px; letter-spacing: .03em; padding: 8px 14px; color: var(--muted); border-bottom: 3px solid transparent; }
+.tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); }
+@media (max-width: 520px) { .tabs { flex-wrap: nowrap; gap: 0; } .tabs button { font-size: 16px; padding: 8px 9px; white-space: nowrap; } }
+.tabpanel { background: var(--panel); border: 1px solid var(--line); border-top: 0; border-radius: 0 0 10px 10px; padding: 16px; display: grid; gap: 14px; }
+
+/* learn */
+.progress { display: flex; gap: 6px; flex-wrap: wrap; }
+.progress b { width: 24px; height: 6px; border-radius: 3px; background: var(--line); }
+.progress b.done { background: var(--ok); } .progress b.now { background: var(--accent); }
+.step h3 { font-family: var(--display); font-weight: 700; font-size: 26px; margin: 0; line-height: 1.1; }
+.step .count { font-family: var(--mono); font-size: 12px; color: var(--muted); }
+.step .say { margin: 6px 0 0; font-size: 16px; max-width: 62ch; }
+.ask { margin: 10px 0 0; font-weight: 600; font-size: 16px; }
+.choices { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.choices button { font-size: 15px; padding: 10px 14px; }
+.choices button.right { border-color: var(--ok); color: var(--ok); font-weight: 600; }
+.choices button.wrong { border-color: var(--alert); color: var(--alert); }
+.explain { margin: 4px 0 0; padding: 12px 14px; border-radius: 8px; background: var(--soft); max-width: 66ch; }
+.explain b.ok { color: var(--ok); } .explain b.no { color: var(--alert); }
+.stepnav { display: flex; gap: 8px; flex-wrap: wrap; }
+
+/* play */
+.group { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.group > b, .sub { font-family: var(--display); font-weight: 600; font-size: 15px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); min-width: 92px; }
+.sliders { display: grid; gap: 10px; }
+.slider { display: grid; grid-template-columns: 170px minmax(0, 1fr) 64px; gap: 10px; align-items: center; }
+.slider label { font-size: 14px; }
+.slider output { font-family: var(--mono); font-size: 14px; text-align: right; font-variant-numeric: tabular-nums; }
+.slider input { width: 100%; accent-color: var(--accent); }
+@media (max-width: 520px) { .slider { grid-template-columns: minmax(0, 1fr) 60px; } .slider input { grid-column: 1 / -1; grid-row: 2; } }
+.settings { display: flex; gap: 16px; flex-wrap: wrap; align-items: center; }
+.settings label { display: inline-flex; gap: 8px; align-items: center; font-size: 14px; }
+select { font: 14px var(--body); color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; }
+.checks { display: flex; gap: 16px; flex-wrap: wrap; font-size: 14px; }
+.checks label { display: inline-flex; gap: 6px; align-items: center; }
+.note { font-size: 13.5px; color: var(--muted); margin: 0; }
+
+/* missions */
+.missions { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.missions li { display: grid; grid-template-columns: 28px minmax(0, 1fr); gap: 10px; align-items: start; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; }
+.missions li.done { border-color: var(--ok); }
+.missions .tick { width: 22px; height: 22px; border-radius: 50%; border: 2px solid var(--line); display: grid; place-items: center; font-weight: 700; color: var(--panel); font-size: 13px; }
+.missions li.done .tick { background: var(--ok); border-color: var(--ok); }
+.missions li.flash { animation: flash 1s ease-out; }
+@keyframes flash { from { background: color-mix(in srgb, var(--ok) 25%, transparent); } to { background: transparent; } }
+.missions p { margin: 0; } .missions small { color: var(--muted); }
+.score { font-family: var(--mono); font-size: 14px; }
+
+/* data */
+textarea { width: 100%; min-height: 150px; font: 12.5px/1.45 var(--mono); color: var(--ink); background: var(--paper); border: 1px solid var(--line); border-radius: 8px; padding: 10px; box-sizing: border-box; resize: vertical; }
+
+/* readout */
+.readout { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; display: grid; gap: 9px; position: sticky; top: calc(env(safe-area-inset-top, 0px) + 12px); }
+@media (max-width: 920px) { .readout { position: static; } }
+.words { font-size: 16px; line-height: 1.45; padding: 10px 12px; border-radius: 8px; background: var(--soft); min-height: 4.4em; }
+.words b { font-weight: 600; }
+.readout h2 { font-family: var(--display); font-weight: 700; font-size: 21px; letter-spacing: .02em; margin: 4px 0 0; display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.readout h2 small { font-family: var(--body); font-weight: 400; font-size: 13px; color: var(--muted); }
+.row { display: grid; grid-template-columns: 20px minmax(0, 1fr) 74px 62px; align-items: center; gap: 9px; font-family: var(--mono); font-size: 14px; font-variant-numeric: tabular-nums; }
+.row .n { font-weight: 600; }
+.row[data-axis="x"] .n { color: var(--x); } .row[data-axis="y"] .n { color: var(--y); } .row[data-axis="z"] .n { color: var(--z); }
+.bar { position: relative; height: 13px; border-radius: 3px; background: var(--soft); }
+.bar::after { content: ""; position: absolute; left: 50%; top: -3px; bottom: -3px; width: 1px; background: var(--muted); }
+.bar i { position: absolute; top: 0; bottom: 0; left: 50%; width: 0; border-radius: 3px; }
+.row[data-axis="x"] .bar i { background: var(--x); } .row[data-axis="y"] .bar i { background: var(--y); } .row[data-axis="z"] .bar i { background: var(--z); }
+.row output { text-align: right; } .row .raw { color: var(--muted); font-size: 12px; }
+.row.clip output { color: var(--alert); }
+.scale { display: grid; grid-template-columns: 20px minmax(0, 1fr) 74px 62px; gap: 9px; font-family: var(--mono); font-size: 11px; color: var(--muted); }
+.scale span:nth-child(2) { display: flex; justify-content: space-between; } .scale span:nth-child(n+3) { text-align: right; }
+.state { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-family: var(--mono); font-size: 13px; }
+.pill { font-family: var(--body); font-size: 12.5px; font-weight: 600; padding: 3px 9px; border-radius: 999px; border: 1px solid currentColor; }
+.pill.ok { color: var(--ok); } .pill.warn { color: var(--warn); } .pill.alert { color: var(--alert); }
+.chart { width: 100%; height: 92px; display: block; border: 1px solid var(--line); border-radius: 6px; background: var(--paper); }
+.foot { margin: 2px 0 0; font-size: 12.5px; color: var(--muted); border-top: 1px solid var(--line); padding-top: 9px; }
+
+code { font-family: var(--mono); font-size: .92em; }
+@media (prefers-reduced-motion: reduce) { .missions li.flash { animation: none; } }
+
+/* dataset: class colours match imu_s3's log colours */
+:root { --c-still: #23864f; --c-bend: #b02f97; --c-walking: #9a7800; --c-jogging: #cc5f0a; --c-running: #cf3b3b; --c-other: #17839a; --pants: #5d6f80; --shoe: #3a3f45; --wood: #9c7b57; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) { --c-still: #4fd18b; --c-bend: #ea72d4; --c-walking: #e8c547; --c-jogging: #f39a4a; --c-running: #ff6b6b; --c-other: #4cc6dc; --pants: #3b4b5b; --shoe: #1c2025; --wood: #6b5440; }
+}
+:root[data-theme="dark"] { --c-still: #4fd18b; --c-bend: #ea72d4; --c-walking: #e8c547; --c-jogging: #f39a4a; --c-running: #ff6b6b; --c-other: #4cc6dc; --pants: #3b4b5b; --shoe: #1c2025; --wood: #6b5440; }
+
+.badge { position: absolute; left: 12px; top: 36px; font: 700 16px/1 var(--display); letter-spacing: .06em; padding: 6px 10px; border-radius: 6px; color: #fff; pointer-events: none; }
+.bigbtn { font-size: 16px; padding: 13px 16px; font-weight: 600; }
+.progressbar { height: 6px; border-radius: 3px; background: var(--soft); overflow: hidden; }
+.progressbar i { display: block; height: 100%; width: 0; background: var(--accent); transition: width .15s; }
+.dsec { display: grid; gap: 10px; }
+.dsec h3, .fg legend { font-family: var(--display); font-weight: 700; font-size: 20px; letter-spacing: .02em; margin: 0; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { border-left: 5px solid var(--cc, var(--muted)); padding: 7px 10px; }
+.strip { width: 100%; height: 38px; display: block; border-radius: 6px; cursor: pointer; border: 1px solid var(--line); }
+.nowline { font-family: var(--mono); font-size: 13px; margin: 0; min-height: 1.5em; }
+.dcharts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+@media (max-width: 760px) { .dcharts { grid-template-columns: minmax(0, 1fr); } }
+.dchart { display: grid; gap: 4px; min-width: 0; }
+.dchart b { font-family: var(--display); font-weight: 600; font-size: 14px; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); }
+.dchart canvas { width: 100%; height: 180px; display: block; border: 1px solid var(--line); border-radius: 6px; background: var(--paper); }
+.tablewrap { overflow-x: auto; }
+table.sum { width: 100%; border-collapse: collapse; font-family: var(--mono); font-size: 13px; font-variant-numeric: tabular-nums; }
+table.sum th, table.sum td { padding: 5px 8px; border-bottom: 1px solid var(--line); text-align: right; white-space: nowrap; }
+table.sum th { font-family: var(--body); font-weight: 600; font-size: 12.5px; color: var(--muted); }
+table.sum th:first-child, table.sum td:first-child { text-align: left; }
+table.sum tfoot td { font-weight: 600; border-bottom: 0; }
+table.sum button { padding: 4px 9px; font-size: 12px; }
+.sw { display: inline-block; width: 11px; height: 11px; border-radius: 2px; margin-right: 7px; vertical-align: -1px; }
+details.box { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; }
+details.box > summary { cursor: pointer; font-family: var(--display); font-weight: 700; font-size: 19px; letter-spacing: .02em; }
+details.box[open] > summary { margin-bottom: 8px; }
+.fg { border: 0; border-top: 1px solid var(--line); margin: 6px 0 0; padding: 10px 0 0; min-width: 0; }
+.fg legend { font-size: 17px; padding-right: 8px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
+.fields { display: grid; gap: 9px; }
+.field { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 12px; align-items: center; font-size: 14px; }
+.field small { display: block; color: var(--muted); font-size: 12.5px; line-height: 1.35; }
+.field .in { display: flex; gap: 6px; align-items: center; justify-content: flex-end; font-family: var(--mono); font-size: 13px; color: var(--muted); flex-wrap: wrap; }
+.field input[type=number] { width: 78px; box-sizing: border-box; font: 14px var(--mono); color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 6px 7px; }
+.field input[type=checkbox] { width: 18px; height: 18px; accent-color: var(--accent); }
+@media (max-width: 560px) { .field { grid-template-columns: minmax(0, 1fr); } .field .in { justify-content: flex-start; } }
+.presets { display: grid; gap: 8px; }
+.warns { margin: 0; padding: 10px 12px 10px 30px; border-radius: 8px; background: color-mix(in srgb, var(--warn) 12%, transparent); color: var(--ink); font-size: 13.5px; display: grid; gap: 4px; }
+.blist { max-height: 340px; overflow: auto; border: 1px solid var(--line); border-radius: 8px; }
+.blist thead th { position: sticky; top: 0; background: var(--panel); }
+pre.file { tab-size: 12; -moz-tab-size: 12; font: 12px/1.5 var(--mono); background: var(--paper); border: 1px solid var(--line); border-radius: 8px; padding: 10px; overflow: auto; margin: 0; }
+ol.steps { margin: 0; padding-left: 22px; display: grid; gap: 6px; max-width: 72ch; }
+@media (max-width: 520px) { table.sum th, table.sum td { padding: 5px 4px; } .tabs { overflow-x: auto; scrollbar-width: none; } .tabs::-webkit-scrollbar { display: none; } }
+</style>
+
+<div class="page">
+  <header>
+    <h1>IMU Axis Playground</h1>
+    <p>A virtual copy of your board and its LSM6DSV16X. Start with <b>Learn</b>: 13 small steps where you guess first, then watch. Then try things yourself in <b>Play</b>, build a labelled bend dataset for ST MEMS Studio in <b>Dataset</b>, solve <b>Missions</b>, and replay your own logs in <b>My data</b>.</p>
+    <div class="key" aria-label="Colour key">
+      <span><i style="background:var(--x)"></i>X arrow</span>
+      <span><i style="background:var(--y)"></i>Y arrow</span>
+      <span><i style="background:var(--z)"></i>Z arrow (out of the chip's top)</span>
+      <span><i style="background:var(--grav)"></i>gravity</span>
+      <span><i style="background:var(--accent)"></i>what the accelerometer reads</span>
+      <span><i class="dot" style="background:var(--accent)"></i>the ball inside the accelerometer</span>
+    </div>
+  </header>
+
+  <div class="bench">
+    <div class="left">
+      <div class="view" id="view" aria-label="3D view. Drag to turn the board.">
+        <div class="hint" id="hint">drag to turn it</div>
+        <div class="viewbar"><button id="pause" aria-pressed="false">Pause</button><button id="reset">Reset</button></div>
+        <div class="caption" id="caption">Lying flat on a table, not moving.</div>
+        <div class="badge" id="badge" hidden></div>
+      </div>
+
+      <div>
+        <div class="tabs" role="tablist">
+          <button role="tab" id="t-learn" aria-selected="true" aria-controls="p-learn">Learn</button>
+          <button role="tab" id="t-play" aria-selected="false" aria-controls="p-play">Play</button>
+          <button role="tab" id="t-dataset" aria-selected="false" aria-controls="p-dataset">Dataset</button>
+          <button role="tab" id="t-missions" aria-selected="false" aria-controls="p-missions">Missions</button>
+          <button role="tab" id="t-data" aria-selected="false" aria-controls="p-data">My data</button>
+        </div>
+
+        <!-- LEARN -->
+        <div class="tabpanel" role="tabpanel" id="p-learn" aria-labelledby="t-learn">
+          <div class="progress" id="progress"></div>
+          <div class="step" id="step"></div>
+        </div>
+
+        <!-- PLAY -->
+        <div class="tabpanel" role="tabpanel" id="p-play" aria-labelledby="t-play" hidden>
+          <div class="group"><b>Where</b>
+            <button id="mode-board" aria-pressed="true">Board on a table</button>
+            <button id="mode-person" aria-pressed="false">Pendant on a person</button>
+          </div>
+
+          <div id="board-controls" class="sliders">
+            <p class="note"><b>Home</b> is how your real board lies on the table. <b>Reset</b> always comes back to it, and the sliders tilt it from there as you see it on screen. A real chip follows the right-hand rule, so with Z pointing down, X into the screen means Y points right, and Y left means X points toward you. Pick the one your edge test shows.</p>
+            <div class="settings"><label for="home-pose">Home pose</label>
+              <select id="home-pose">
+                <option value="a">Chip down · X into the screen · Y right</option>
+                <option value="b">Chip down · X toward you · Y left</option>
+                <option value="c">Chip up · X into the screen · Y left</option>
+              </select>
+            </div>
+            <div class="slider"><label for="s-tip">Tip toward you / away</label><input type="range" id="s-tip" min="-90" max="90" step="1" value="0"><output id="o-tip">0°</output></div>
+            <div class="slider"><label for="s-roll">Tip left / right</label><input type="range" id="s-roll" min="-180" max="180" step="1" value="0"><output id="o-roll">0°</output></div>
+            <div class="slider"><label for="s-turn">Turn on the table</label><input type="range" id="s-turn" min="-180" max="180" step="1" value="0"><output id="o-turn">0°</output></div>
+            <div class="group"><b>Put it</b>
+              <button data-pose="home">Home (your board)</button><button data-pose="flat">Chip facing up</button><button data-pose="down">Chip facing down</button>
+              <button data-pose="xup" data-axis="x">X up</button><button data-pose="yup" data-axis="y">Y up</button><button data-pose="log">Your log pose</button>
+            </div>
+            <div class="group"><b>Spin it</b>
+              <button data-spin="x" data-axis="x">Around X</button><button data-spin="y" data-axis="y">Around Y</button><button data-spin="z" data-axis="z">Around Z</button>
+              <button data-spin="-x" data-axis="x">X backwards</button>
+            </div>
+            <div class="group"><b>Move it</b><button id="b-shake">Shake</button><button id="b-drop">Drop and catch</button></div>
+          </div>
+
+          <div id="person-controls" class="sliders" hidden>
+            <p class="note">The board hangs on the chest like your pendant: X points up the body, Z points forward out of the chest. This is how it sat when your first log showed X close to +1 g.</p>
+            <div class="group"><b>Body</b>
+              <button data-act="upright">Sit upright</button><button data-act="plate">Lean to plate</button><button data-act="back">Lean back</button><button data-act="side">Lean sideways</button><button data-act="floor">Bend to floor</button>
+            </div>
+            <div class="group"><b>Move</b>
+              <button data-act="walk">Walk</button><button data-act="jog">Jog</button><button data-act="run">Run</button><button data-act="turn">Turn around</button>
+            </div>
+          </div>
+
+          <div class="settings"><span class="sub">Chip range</span>
+            <label>Accelerometer <select id="acc-range"><option value="2">±2 g</option><option value="4" selected>±4 g (yours)</option><option value="8">±8 g</option><option value="16">±16 g</option></select></label>
+            <label>Gyroscope <select id="gyr-range"><option value="125">±125 °/s</option><option value="250">±250 °/s</option><option value="500">±500 °/s</option><option value="1000">±1000 °/s</option><option value="2000" selected>±2000 °/s (yours)</option><option value="4000">±4000 °/s</option></select></label>
+          </div>
+          <p class="note">A bigger range fits bigger values but gives fewer counts per g. Watch the raw numbers change. Too small a range and the value gets stuck at the edge: that is called clipping.</p>
+          <div class="checks"><span class="sub">Show</span>
+            <label><input type="checkbox" id="c-ball" checked> ball in a box</label>
+            <label><input type="checkbox" id="c-grav" checked> gravity arrow</label>
+            <label><input type="checkbox" id="c-read" checked> reading arrow</label>
+          </div>
+        </div>
+
+
+        <!-- DATASET -->
+        <div class="tabpanel" role="tabpanel" id="p-dataset" aria-labelledby="t-dataset" hidden>
+          <p class="note">Virtual people sit at a table with the pendant on the chest. Each bend is a lean toward the plate at a <b>random angle inside your bracket</b>, toward a <b>random spot on the plate</b>, at that person's own speed, before they sit back up. They also sit still, talk, look at a phone, walk, jog, run, bend to the floor and turn in the chair, so the model learns what is <b>not</b> a bend. Every sample is labelled, and the files are laid out the way MEMS Studio expects.</p>
+          <div class="dsec">
+            <div class="group"><button class="primary bigbtn" id="ds-gen">Generate 100 random bends + everything else</button><button id="ds-new">New random people</button></div>
+            <div class="progressbar" id="ds-prog" hidden><i></i></div>
+            <p class="note" id="ds-status" aria-live="polite"></p>
+          </div>
+
+          <div id="ds-results" class="dsec" hidden>
+            <h3>Watch it</h3>
+            <div class="group">
+              <button class="primary" id="ds-rand">▶ Random bend</button>
+              <button id="ds-all">▶ All bends, one after another</button>
+              <button id="ds-stop">■ Stop</button>
+              <label class="note" for="ds-speed">Speed</label>
+              <select id="ds-speed"><option value="0.5">0.5×</option><option value="1" selected>1×</option><option value="2">2×</option><option value="4">4×</option><option value="16">16×</option></select>
+            </div>
+            <div class="group"><span class="sub">Example of</span><div class="chips" id="ds-ex"></div></div>
+            <div class="group"><span class="sub">Person</span><select id="ds-person" aria-label="Person"></select><button id="ds-sess">▶ Whole session</button></div>
+            <canvas class="strip" id="ds-strip" role="img" aria-label="Labels over this person's session. Click to play from that moment."></canvas>
+            <p class="nowline" id="ds-now"></p>
+            <p class="note">The bar is this person's whole session, coloured by label (still is drawn short so the rest stands out). Click it to play from there. Drag the 3D view to look around.</p>
+
+            <div class="dcharts">
+              <div class="dchart"><b>Angle bands · side view</b><canvas id="ds-fan" aria-label="Angle bands: lean back, still, bend bracket, floor. Each tick is one generated bend."></canvas></div>
+              <div class="dchart"><b>Bends per angle</b><canvas id="ds-hist" aria-label="Histogram of the generated bend angles"></canvas></div>
+              <div class="dchart"><b>Plate · top view</b><canvas id="ds-plate" aria-label="Each dot is one bend: direction is where on the plate, distance is the lean angle"></canvas></div>
+            </div>
+            <p class="note" id="ds-astats"></p>
+
+            <h3>What you get</h3>
+            <div class="tablewrap"><table class="sum" id="ds-sum"></table></div>
+            <p class="note" id="ds-sumnote"></p>
+            <div class="group" id="ds-dl" hidden>
+              <button class="primary" id="ds-zip">Download ZIP for MEMS Studio</button>
+              <button id="ds-csv">all_samples_labelled.csv</button>
+              <button id="ds-bcsv">bends.csv</button>
+            </div>
+            <p class="note" id="ds-dlnote" aria-live="polite"></p>
+          </div>
+
+          <details class="box" id="ds-settings" open>
+            <summary>Settings</summary>
+            <div class="presets">
+              <div class="group"><span class="sub">Size</span><button data-size="quick">Quick test · 30 bends</button><button data-size="standard">Standard · 100 bends</button><button data-size="big">Big · 400 bends</button></div>
+              <div class="group"><span class="sub">Angles</span><button data-angles="gentle">Gentle 10–25°</button><button data-angles="normal">Normal 12–35°</button><button data-angles="deep">Deep 20–45°</button><button id="ds-defaults">Reset all</button></div>
+            </div>
+            <ul class="warns" id="ds-warn" hidden></ul>
+            <div id="ds-fields"></div>
+            <div class="group" style="margin-top:12px"><button class="primary" id="ds-gen2">Generate</button></div>
+          </details>
+
+          <details class="box" id="ds-bends">
+            <summary>All <span id="ds-bcount">0</span> bends</summary>
+            <div class="blist" id="ds-blist"></div>
+          </details>
+
+          <details class="box">
+            <summary>What a MEMS Studio file looks like</summary>
+            <p class="note" id="ds-fpath"></p>
+            <pre class="file" id="ds-file"></pre>
+          </details>
+
+          <details class="box" open>
+            <summary>Train the decision tree in MEMS Studio</summary>
+            <ol class="steps" id="ds-steps"></ol>
+          </details>
+        </div>
+
+        <!-- MISSIONS -->
+        <div class="tabpanel" role="tabpanel" id="p-missions" aria-labelledby="t-missions" hidden>
+          <p class="note">Use anything in Play (sliders, buttons, dragging) to make each one happen. They tick themselves when the readings match. <span class="score" id="score"></span></p>
+          <ol class="missions" id="missions"></ol>
+          <div><button id="m-reset">Clear ticks</button></div>
+        </div>
+
+        <!-- DATA -->
+        <div class="tabpanel" role="tabpanel" id="p-data" aria-labelledby="t-data" hidden>
+          <p class="note">Paste raw lines from <code>imu_s3</code> (set <code>PRINT_RAW 1</code>). Lines look like <code>I (82549) imu_s3: ax=  7094 ay=   612 az= -3928 | gx=     0 gy=    -1 gz=     6</code>. The box below already holds your first log. Raw counts are read with the chip range chosen in Play.</p>
+          <label for="data" class="sub">Your log</label>
+          <textarea id="data" spellcheck="false"></textarea>
+          <div class="group">
+            <button class="primary" id="d-play">Play these lines</button>
+            <button id="d-stop">Stop</button>
+            <label class="note"><input type="checkbox" id="d-loop" checked> loop</label>
+            <span class="score" id="d-status"></span>
+          </div>
+          <p class="note">The board copies the tilt from the accelerometer numbers. It cannot know which way the board faces around "up", because the accelerometer cannot see that turn (Learn step 9).</p>
+        </div>
+      </div>
+    </div>
+
+    <aside class="readout" aria-live="off">
+      <div class="words" id="words"></div>
+
+      <h2>Accelerometer <small>where "up" is, plus any push · g</small></h2>
+      <div class="row" data-axis="x" id="arow0"><span class="n">X</span><div class="bar"><i id="ab0"></i></div><output id="av0"></output><output class="raw" id="ar0"></output></div>
+      <div class="row" data-axis="y" id="arow1"><span class="n">Y</span><div class="bar"><i id="ab1"></i></div><output id="av1"></output><output class="raw" id="ar1"></output></div>
+      <div class="row" data-axis="z" id="arow2"><span class="n">Z</span><div class="bar"><i id="ab2"></i></div><output id="av2"></output><output class="raw" id="ar2"></output></div>
+      <div class="scale"><span></span><span><em>−2 g</em><em>0</em><em>+2 g</em></span><span>value</span><span>raw</span></div>
+      <div class="state">total <b id="amag">1.00 g</b> <span class="pill ok" id="astate">still</span></div>
+      <canvas class="chart" id="chart-a" aria-label="Accelerometer over the last 10 seconds"></canvas>
+
+      <h2>Gyroscope <small>how fast it turns · °/s</small></h2>
+      <div class="row" data-axis="x" id="grow0"><span class="n">X</span><div class="bar"><i id="gb0"></i></div><output id="gv0"></output><output class="raw" id="gr0"></output></div>
+      <div class="row" data-axis="y" id="grow1"><span class="n">Y</span><div class="bar"><i id="gb1"></i></div><output id="gv1"></output><output class="raw" id="gr1"></output></div>
+      <div class="row" data-axis="z" id="grow2"><span class="n">Z</span><div class="bar"><i id="gb2"></i></div><output id="gv2"></output><output class="raw" id="gr2"></output></div>
+      <div class="scale"><span></span><span><em>−180</em><em>0</em><em>+180</em></span><span>value</span><span>raw</span></div>
+      <div class="state"><span class="pill ok" id="gstate">not turning</span></div>
+      <canvas class="chart" id="chart-g" aria-label="Gyroscope over the last 10 seconds"></canvas>
+
+      <p class="foot" id="foot"></p>
+    </aside>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script>
+// ENGINE START
+/*
+ * IMUDS - synthetic LSM6DSV16X dataset engine for a chest-worn pendant.
+ * Pure JS, no dependencies: the same code runs in the playground page and in Node.
+ *
+ * Body frame (world): x = forward (toward the table), y = up, z = the person's right.
+ * Hip pivot at the origin while seated; the pendant sits on the chest above it.
+ * Physics: pendant position -> linear acceleration (2nd derivative), orientation ->
+ * gyro (body rates), plus direct gait accelerations (step bounce, foot impacts).
+ * Sensor model: per-person offsets, sensitivity error, noise, LSB quantization,
+ * clipping at ±4 g / ±2000 dps, block-average decimation to the export rate.
+ */
+var IMUDS = (function () {
+  "use strict";
+  var D2R = Math.PI / 180, R2D = 180 / Math.PI, G0 = 9.80665, FS = 240;
+  var CLASSES = ["still", "bend", "walking", "jogging", "running", "other"];
+  var LBL = {}; CLASSES.forEach(function (c, i) { LBL[c] = i; });
+
+  /* ---------- random ---------- */
+  function makeRng(seed) {
+    var s = (seed >>> 0) || 1;
+    function r() { s = (s + 0x6D2B79F5) | 0; var t = Math.imul(s ^ (s >>> 15), 1 | s); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }
+    r.uni = function (a, b) { return a + (b - a) * r(); };
+    r.int = function (a, b) { return Math.floor(r.uni(a, b + 1 - 1e-9)); };
+    r.gauss = function () { var u = 0; while (u === 0) u = r(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * r()); };
+    r.pick = function (a) { return a[Math.floor(r() * a.length)]; };
+    r.chance = function (p) { return r() < p; };
+    r.shuffle = function (a) { for (var i = a.length - 1; i > 0; i--) { var j = Math.floor(r() * (i + 1)); var t = a[i]; a[i] = a[j]; a[j] = t; } return a; };
+    return r;
+  }
+
+  /* ---------- quaternions [w,x,y,z] ---------- */
+  function qmul(a, b) {
+    return [a[0] * b[0] - a[1] * b[1] - a[2] * b[2] - a[3] * b[3],
+            a[0] * b[1] + a[1] * b[0] + a[2] * b[3] - a[3] * b[2],
+            a[0] * b[2] - a[1] * b[3] + a[2] * b[0] + a[3] * b[1],
+            a[0] * b[3] + a[1] * b[2] - a[2] * b[1] + a[3] * b[0]];
+  }
+  function qconj(a) { return [a[0], -a[1], -a[2], -a[3]]; }
+  function qaxis(x, y, z, ang) { var n = Math.hypot(x, y, z) || 1, s = Math.sin(ang / 2); return [Math.cos(ang / 2), x / n * s, y / n * s, z / n * s]; }
+  function qrot(q, v) { var r = qmul(qmul(q, [0, v[0], v[1], v[2]]), qconj(q)); return [r[1], r[2], r[3]]; }
+  function qnorm(q) { var n = Math.hypot(q[0], q[1], q[2], q[3]); return [q[0] / n, q[1] / n, q[2] / n, q[3] / n]; }
+  function qslerp(a, b, t) {
+    var d = a[0] * b[0] + a[1] * b[1] + a[2] * b[2] + a[3] * b[3];
+    if (d < 0) { b = [-b[0], -b[1], -b[2], -b[3]]; d = -d; }
+    if (d > 0.9995) return qnorm([a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t, a[3] + (b[3] - a[3]) * t]);
+    var th = Math.acos(d), s = Math.sin(th), wa = Math.sin((1 - t) * th) / s, wb = Math.sin(t * th) / s;
+    return [wa * a[0] + wb * b[0], wa * a[1] + wb * b[1], wa * a[2] + wb * b[2], wa * a[3] + wb * b[3]];
+  }
+  function qFromBasis(X, Y, Z) {   // columns = where the chip's X, Y, Z point (rotation chip -> torso)
+    var m00 = X[0], m10 = X[1], m20 = X[2], m01 = Y[0], m11 = Y[1], m21 = Y[2], m02 = Z[0], m12 = Z[1], m22 = Z[2], tr = m00 + m11 + m22, s;
+    if (tr > 0) { s = 0.5 / Math.sqrt(tr + 1); return qnorm([0.25 / s, (m21 - m12) * s, (m02 - m20) * s, (m10 - m01) * s]); }
+    if (m00 > m11 && m00 > m22) { s = 2 * Math.sqrt(1 + m00 - m11 - m22); return qnorm([(m21 - m12) / s, 0.25 * s, (m01 + m10) / s, (m02 + m20) / s]); }
+    if (m11 > m22) { s = 2 * Math.sqrt(1 + m11 - m00 - m22); return qnorm([(m02 - m20) / s, (m01 + m10) / s, 0.25 * s, (m12 + m21) / s]); }
+    s = 2 * Math.sqrt(1 + m22 - m00 - m11); return qnorm([(m10 - m01) / s, (m02 + m20) / s, (m12 + m21) / s, 0.25 * s]);
+  }
+  /* lean vector (fwd°, side°): tilt "up" toward forward/right by |lean|; yaw° > 0 = turn left */
+  function torsoQuat(fwd, side, yaw) {
+    var th = Math.hypot(fwd, side), qt = [1, 0, 0, 0];
+    if (th > 1e-9) qt = qaxis(side / th, 0, -fwd / th, th * D2R);
+    return qmul(qaxis(0, 1, 0, yaw * D2R), qt);
+  }
+  function mj(u) { u = u < 0 ? 0 : (u > 1 ? 1 : u); return u * u * u * (10 - 15 * u + 6 * u * u); }  // minimum-jerk 0..1
+
+  /* ---------- settings ---------- */
+  var MOUNTS = {
+    xup_zout:   { label: "X up · Z out of the chest (your first log)", X: [0, 1, 0], Y: [0, 0, 1], Z: [1, 0, 0] },
+    xup_zin:    { label: "X up · Z into the chest", X: [0, 1, 0], Y: [0, 0, -1], Z: [-1, 0, 0] },
+    xdown_zout: { label: "X down · Z out of the chest", X: [0, -1, 0], Y: [0, 0, -1], Z: [1, 0, 0] },
+    yup_zout:   { label: "Y up · Z out of the chest", X: [0, 0, -1], Y: [0, 1, 0], Z: [1, 0, 0] }
+  };
+  function defaults() {
+    return {
+      seed: 1234, people: 20,
+      bends: 100, bendMin: 12, bendMax: 35, plateSpread: 25,
+      downMin: 0.6, downMax: 1.3, holdMin: 0.4, holdMax: 1.6, upMin: 0.6, upMax: 1.3,
+      pauseMin: 2, pauseMax: 6, stillLeanMax: 8,
+      stillExtra: 24, stillMin: 6, stillMax: 15,
+      walkMin: 3, jogMin: 2, runMin: 2,
+      floorBends: 12, sideReaches: 12, stretches: 8, turns: 8,
+      mount: "xup_zout", coupling: 1.0,
+      odr: 30, header: "st", gyro: true, minFileSec: 1.5
+    };
+  }
+
+  /* ---------- sample builder ---------- */
+  function Builder() {
+    this.k = ["fwd", "side", "yaw", "hx", "hy", "hz", "ex", "ey", "ez", "ph", "bob", "seat", "lab", "seg"];
+    var self = this; this.k.forEach(function (k) { self[k] = []; });
+    this.segs = []; this.nextSeg = 0;
+  }
+  Builder.prototype.begin = function (label, person, info) {
+    var id = this.nextSeg++; this.segs.push({ id: id, label: label, person: person, info: info || null, i0: this.fwd.length, i1: -1 }); return id;
+  };
+  Builder.prototype.end = function () { this.segs[this.segs.length - 1].i1 = this.fwd.length; };
+  /* run fn(t, u) for dur seconds; fn returns a partial state; missing fields keep the current state */
+  Builder.prototype.emit = function (st, dur, fn) {
+    var n = Math.max(1, Math.round(dur * FS)), seg = this.nextSeg - 1, lab = LBL[this.segs[this.segs.length - 1].label];
+    for (var i = 1; i <= n; i++) {
+      var t = i / FS, o = (fn ? fn(t, i / n) : null) || {};
+      var v = {
+        fwd: o.fwd !== undefined ? o.fwd : st.fwd, side: o.side !== undefined ? o.side : st.side, yaw: o.yaw !== undefined ? o.yaw : st.yaw,
+        hx: o.hx !== undefined ? o.hx : st.hx, hy: o.hy !== undefined ? o.hy : st.hy, hz: o.hz !== undefined ? o.hz : st.hz,
+        ex: o.ex || 0, ey: o.ey || 0, ez: o.ez || 0, ph: o.ph || 0, bob: o.bob || 0, seat: o.seat !== undefined ? o.seat : st.seat
+      };
+      this.fwd.push(v.fwd); this.side.push(v.side); this.yaw.push(v.yaw); this.hx.push(v.hx); this.hy.push(v.hy); this.hz.push(v.hz);
+      this.ex.push(v.ex); this.ey.push(v.ey); this.ez.push(v.ez); this.ph.push(v.ph); this.bob.push(v.bob); this.seat.push(v.seat);
+      this.lab.push(lab); this.seg.push(seg);
+      if (i === n) { st.fwd = v.fwd; st.side = v.side; st.yaw = v.yaw; st.hx = v.hx; st.hy = v.hy; st.hz = v.hz; st.seat = v.seat; }
+    }
+  };
+  /* smooth move of posture from the current state to a target over dur, optional extra fn layered on top */
+  function moveTo(B, st, dur, tgt, extra) {
+    var s0 = { fwd: st.fwd, side: st.side, yaw: st.yaw, hx: st.hx, hy: st.hy, hz: st.hz, seat: st.seat };
+    B.emit(st, dur, function (t, u) {
+      var k = mj(u), o = {};
+      ["fwd", "side", "yaw", "hx", "hy", "hz"].forEach(function (f) { o[f] = tgt[f] !== undefined ? s0[f] + (tgt[f] - s0[f]) * k : s0[f]; });
+      if (tgt.seat !== undefined) o.seat = u < 0.5 ? s0.seat : tgt.seat;
+      if (extra) { var e = extra(t, u); for (var key in e) o[key] = (o[key] || 0) + e[key]; }
+      return o;
+    });
+  }
+  function bell(u) { var s = Math.sin(Math.PI * u); return s * s; }   // 0 at both ends with zero slope: no jolts
+
+  /* ---------- seated / standing still ---------- */
+  function still(B, st, r, P, dur, kind, cfg) {
+    B.begin("still", P.id, { kind: kind }, cfg);
+    var tgt;
+    if (!st.seat) tgt = { fwd: r.uni(-1, 3), side: r.uni(-1.5, 1.5), yaw: st.yaw * 0.5 + r.uni(-6, 6) };
+    else if (kind === "slouch") tgt = { fwd: P.base + r.uni(3, Math.max(3.5, cfg.stillLeanMax)), side: P.sideBase + r.uni(-2, 2) };
+    else if (kind === "phone") tgt = { fwd: P.base + r.uni(4, Math.max(4.5, cfg.stillLeanMax)), side: P.sideBase + r.uni(-1.5, 1.5) };
+    else if (kind === "leanback") tgt = { fwd: r.uni(-16, -5), side: P.sideBase + r.uni(-2, 2) };
+    else if (kind === "drink") tgt = { fwd: P.base - r.uni(4, 10), side: P.sideBase + r.uni(-1.5, 1.5) };
+    else tgt = { fwd: P.base + r.uni(-2, 2), side: P.sideBase + r.uni(-1.5, 1.5), yaw: st.yaw * 0.5 + r.uni(-5, 5) };
+    var d = Math.abs((tgt.fwd !== undefined ? tgt.fwd : st.fwd) - st.fwd) + Math.abs((tgt.side !== undefined ? tgt.side : st.side) - st.side);
+    var ttr = Math.min(dur * 0.4, 0.8 + d * 0.06), hold = Math.max(0.2, dur - ttr), total = ttr + hold;
+    var talk = kind === "talk", g = talk ? [r.uni(0.5, 0.9), r.uni(0.9, 1.3), r.uni(1.1, 1.5), r.uni(0, 6), r.uni(0, 6), r.uni(0, 6), r.uni(0.8, 1.8)] : null;
+    /* talking gestures fade in and out smoothly over the whole segment */
+    var extra = talk ? function (T) {
+      var a = g[6] * mj(T / 0.6) * mj((total - T) / 0.6);
+      return { fwd: a * (0.5 * Math.sin(2 * Math.PI * g[0] * T + g[3]) + 0.2 * Math.sin(2 * Math.PI * g[2] * T + g[5])),
+               side: a * 0.6 * Math.sin(2 * Math.PI * g[1] * T + g[4]), yaw: a * 1.4 * Math.sin(2 * Math.PI * g[0] * 0.8 * T + g[5]) };
+    } : null;
+    moveTo(B, st, ttr, tgt, extra);
+    var base = { fwd: tgt.fwd !== undefined ? tgt.fwd : st.fwd, side: tgt.side !== undefined ? tgt.side : st.side, yaw: tgt.yaw !== undefined ? tgt.yaw : st.yaw };
+    if (extra) {
+      st.fwd = base.fwd; st.side = base.side; st.yaw = base.yaw;
+      B.emit(st, hold, function (t) { var e = extra(t + ttr); return { fwd: base.fwd + e.fwd, side: base.side + e.side, yaw: base.yaw + e.yaw }; });
+      st.fwd = base.fwd; st.side = base.side; st.yaw = base.yaw;
+    } else {
+      B.emit(st, hold, null);
+    }
+    B.end();
+  }
+
+  /* ---------- bend toward the plate (label: bend) ---------- */
+  function bend(B, st, r, P, cfg, info) {
+    var th = r.uni(cfg.bendMin, cfg.bendMax);
+    var beta = r.uni(-cfg.plateSpread, cfg.plateSpread);
+    var style = r() < 0.15 ? "two-stage" : (r() < 0.18 ? "quick" : "normal");
+    /* gentle: never faster than 50°/s on average, going down or coming back */
+    var down = Math.max(r.uni(cfg.downMin, cfg.downMax) / P.speed, th / 50), up = Math.max(r.uni(cfg.upMin, cfg.upMax) / P.speed, th / 50);
+    var hold = style === "quick" ? r.uni(0.15, 0.35) : r.uni(cfg.holdMin, cfg.holdMax);
+    /* every bend lasts long enough to fill one classifier window */
+    var minTotal = cfg.minFileSec + 0.1;
+    if (down + hold + up < minTotal) hold += minTotal - (down + hold + up);
+    var f0 = st.fwd, s0 = st.side, y0 = st.yaw;
+    var tf = f0 + th * Math.cos(beta * D2R), ts = s0 + th * Math.sin(beta * D2R), ty = y0 - 0.35 * beta;
+    info.angle = th; info.dir = beta; info.down = down; info.hold = hold; info.up = up; info.style = style; info.person = P.id;
+    B.begin("bend", P.id, info);
+    if (style === "two-stage") {
+      var k1 = r.uni(0.5, 0.7), p1 = r.uni(0.15, 0.35);
+      /* each stage respects the same 50°/s gentleness limit */
+      var d1 = Math.max(down * k1 * 1.1, th * k1 / 50), d2 = Math.max(down * (1 - k1) * 1.3, th * (1 - k1) / 50, 0.3);
+      moveTo(B, st, d1, { fwd: f0 + (tf - f0) * k1, side: s0 + (ts - s0) * k1, yaw: y0 + (ty - y0) * k1 });
+      B.emit(st, p1, null);
+      moveTo(B, st, d2, { fwd: tf, side: ts, yaw: ty });
+      info.down = d1 + p1 + d2;
+    } else {
+      moveTo(B, st, down, { fwd: tf, side: ts, yaw: ty });
+    }
+    /* picking food: small scooping rocks plus one reach dip while the lean is held */
+    var hk = Math.min(1, hold / 0.8);   // short holds leave no time for big picking moves
+    var A = r.uni(0.5, 1.5) * hk, fq = r.uni(0.8, 1.6), ph = r.uni(0, 6), dip = hold >= 0.6 ? r.uni(0, 2) * Math.min(1, hold * hold) : 0, sideA = r.uni(0.2, 0.8) * hk;
+    var hf = st.fwd, hs = st.side;
+    B.emit(st, hold, function (t, u) {
+      var env = bell(u);
+      return { fwd: hf + env * (A * 0.6 * Math.sin(2 * Math.PI * fq * t + ph) + dip), side: hs + env * sideA * Math.sin(2 * Math.PI * fq * 0.7 * t) };
+    });
+    st.fwd = hf; st.side = hs;
+    moveTo(B, st, up, { fwd: f0 + r.uni(-1.5, 1.5), side: s0 + r.uni(-1, 1), yaw: y0 + r.uni(-2, 2) });
+    B.end();
+  }
+
+  /* ---------- look-alike moves (label: other) ---------- */
+  function other(B, st, r, P, kind) {
+    B.begin("other", P.id, { kind: kind });
+    var f0 = st.fwd, s0 = st.side, y0 = st.yaw, sp = P.speed;
+    if (kind === "floor") {
+      var th = r.uni(55, 85), be = r.uni(-40, 40);
+      moveTo(B, st, r.uni(1.0, 1.8) / sp, { fwd: f0 + th * Math.cos(be * D2R), side: s0 + th * Math.sin(be * D2R), yaw: y0 - 0.3 * be });
+      B.emit(st, r.uni(0.5, 1.5), null);
+      moveTo(B, st, r.uni(1.0, 2.0) / sp, { fwd: f0, side: s0, yaw: y0 });
+    } else if (kind === "side") {
+      var sg = r() < 0.5 ? -1 : 1;
+      moveTo(B, st, r.uni(0.6, 1.2) / sp, { fwd: f0 + r.uni(0, 10), side: s0 + sg * r.uni(18, 35), yaw: y0 - sg * r.uni(10, 30) });
+      B.emit(st, r.uni(0.3, 1.0), null);
+      moveTo(B, st, r.uni(0.6, 1.2) / sp, { fwd: f0, side: s0, yaw: y0 });
+    } else if (kind === "stretch") {
+      moveTo(B, st, r.uni(1.0, 1.6) / sp, { fwd: r.uni(-35, -22), side: s0 + r.uni(-5, 5) });
+      B.emit(st, r.uni(0.5, 1.2), null);
+      moveTo(B, st, r.uni(1.0, 1.6) / sp, { fwd: f0, side: s0 });
+    } else if (kind === "turn") {
+      var sgn = r() < 0.5 ? -1 : 1;
+      moveTo(B, st, r.uni(0.8, 1.5) / sp, { yaw: y0 + sgn * r.uni(40, 90), side: s0 + sgn * r.uni(3, 10) });
+      B.emit(st, r.uni(0.2, 0.6), null);
+      moveTo(B, st, r.uni(0.8, 1.5) / sp, { yaw: y0, side: s0 });
+    } else if (kind === "drink") {
+      moveTo(B, st, r.uni(0.6, 1.0) / sp, { fwd: f0 - r.uni(4, 12) });
+      var hfw = st.fwd, sw = r.uni(1.5, 2.6), am = r.uni(0.3, 0.8);
+      B.emit(st, r.uni(1.5, 3.0), function (t, u) { return { fwd: hfw + bell(u) * am * Math.sin(2 * Math.PI * sw * t) }; });
+      st.fwd = hfw;
+      moveTo(B, st, r.uni(0.6, 1.0) / sp, { fwd: f0 });
+    } else if (kind === "standup") {
+      var lean = r.uni(25, 40);
+      moveTo(B, st, r.uni(0.5, 0.8) / sp, { fwd: lean });
+      moveTo(B, st, r.uni(0.8, 1.2) / sp, { fwd: r.uni(0, 3), hy: 0.42, hx: 0.12, seat: 0 });
+    } else if (kind === "sitdown") {
+      var ln = r.uni(20, 35);
+      moveTo(B, st, r.uni(0.5, 0.8) / sp, { fwd: ln });
+      moveTo(B, st, r.uni(1.0, 1.4) / sp, { fwd: P.base + r.uni(-1, 1), hy: 0, hx: 0, seat: 1 });
+    }
+    B.end();
+  }
+
+  /* ---------- gait (labels: walking / jogging / running) ---------- */
+  var GAIT = {
+    walking: { f: [1.6, 2.1], lean: [2, 6], of: [0.8, 1.5], or: [1.5, 3], oy: [3, 6], v: [0.22, 0.38], imp: [0.08, 0.18], fa: [0.05, 0.12], la: [0.06, 0.12] },
+    jogging: { f: [2.4, 2.8], lean: [5, 10], of: [1.2, 2.2], or: [2, 4], oy: [4, 8], st: [0.45, 0.55], imp: [0.2, 0.5], fa: [0.1, 0.25], la: [0.1, 0.2] },
+    running: { f: [2.7, 3.2], lean: [8, 15], of: [1.5, 2.5], or: [2, 4], oy: [5, 10], st: [0.35, 0.45], imp: [0.4, 0.9], fa: [0.15, 0.35], la: [0.1, 0.25] }
+  };
+  function gait(B, st, r, P, type, dur) {
+    var g = GAIT[type], u = function (a) { return r.uni(a[0], a[1]); };
+    var f0 = u(g.f), lean = u(g.lean), of = u(g.of), orr = u(g.or), oy = u(g.oy), fa = u(g.fa), la = u(g.la);
+    var vert = g.v ? u(g.v) : 0, stance = g.st ? u(g.st) : 0, imp = u(g.imp), drift = r.uni(8, 15), dph = r.uni(0, 6);
+    var P_h = stance ? Math.PI * (1 - stance) / (2 * stance) : 0;   // stance hump height so the step averages to 0 g
+    var y0 = st.yaw, fb = st.fwd, sb = st.side, ramp = Math.min(1.3, dur / 3);
+    B.begin(type, P.id, { kind: type, cadence: f0 });
+    var phi = 0;
+    B.emit(st, dur, function (t) {
+      var e = mj(t / ramp) * mj((dur - t) / ramp);
+      var f = f0 * (1 + 0.03 * Math.sin(2 * Math.PI * t / drift + dph));
+      phi += 2 * Math.PI * f / FS;
+      var stepU = (phi % (2 * Math.PI)) / (2 * Math.PI), tsince = stepU / f;
+      var w = 0.025, impulse = imp * (tsince / w) * Math.exp(1 - tsince / w);
+      var av;
+      if (type === "walking") av = vert * (Math.cos(phi) + 0.3 * Math.cos(2 * phi + 0.4)) + impulse;
+      else av = (stepU < stance ? P_h * Math.sin(Math.PI * stepU / stance) : -1) + impulse;
+      return {
+        fwd: fb + (lean - fb) * e + of * e * Math.sin(phi + 1.2),
+        side: sb * (1 - e) + orr * e * Math.sin(phi / 2 + 0.3),
+        yaw: y0 + oy * e * Math.sin(phi / 2 + 0.5),
+        ex: e * (fa * Math.sin(phi + 0.6) - 0.3 * impulse), ey: e * av, ez: e * la * Math.sin(phi / 2),
+        ph: phi, bob: e * (type === "walking" ? 0.02 : 0.04) * Math.sin(phi)
+      };
+    });
+    st.fwd = fb; st.side = sb; st.yaw = y0;
+    B.end();
+  }
+
+  /* ---------- people and their sessions ---------- */
+  function makePerson(id, r) {
+    var ax = [r.gauss(), r.gauss(), r.gauss()];
+    return {
+      id: id, base: r.uni(-3, 6), sideBase: r.uni(-2, 2), speed: r.uni(0.85, 1.2),
+      chest: [r.uni(0.10, 0.15), r.uni(0.38, 0.50), 0],
+      breathA: r.uni(0.3, 0.8), breathF: r.uni(0.2, 0.32), breathH: r.uni(0.002, 0.004), sway: r.uni(0.2, 0.5),
+      mountErr: qaxis(ax[0], ax[1], ax[2], r.uni(0, 6) * D2R),
+      aNoise: r.uni(1.2, 2.5), gNoise: r.uni(0.05, 0.15),
+      aOff: [r.uni(-25, 25), r.uni(-25, 25), r.uni(-25, 25)], gBias: [r.uni(-1, 1), r.uni(-1, 1), r.uni(-1, 1)],
+      sens: [1 + r.uni(-0.01, 0.01), 1 + r.uni(-0.01, 0.01), 1 + r.uni(-0.01, 0.01)]
+    };
+  }
+  function split(total, parts, r) {        // spread an integer total over people
+    var out = []; for (var i = 0; i < parts; i++) out.push(Math.floor(total / parts));
+    var rest = total - out.reduce(function (a, b) { return a + b; }, 0), idx = r.shuffle(out.map(function (_, i) { return i; }));
+    for (var k = 0; k < rest; k++) out[idx[k % parts]]++;
+    return out;
+  }
+  /* cut a total into 20-40 s bouts (a short remainder joins the last bout) */
+  function bouts(seconds, r) {
+    var out = [];
+    while (seconds > 0) { var d = Math.min(seconds, r.uni(20, 40)); if (seconds - d < 8) d = seconds; out.push(d); seconds -= d; }
+    return out;
+  }
+
+  /* generation runs one person at a time (start -> stepPerson ... -> finish), so a page can
+   * keep painting between people; generate() runs the same steps in one go. */
+  function start(cfgIn) {
+    var cfg = Object.assign(defaults(), cfgIn || {});
+    var r = makeRng(cfg.seed), nP = Math.max(1, cfg.people | 0);
+    var people = []; for (var i = 0; i < nP; i++) people.push(makePerson(i + 1, r));
+    var qMount = qFromBasis(MOUNTS[cfg.mount].X, MOUNTS[cfg.mount].Y, MOUNTS[cfg.mount].Z);
+    var q = {
+      bends: split(cfg.bends, nP, r), extra: split(cfg.stillExtra, nP, r),
+      floor: split(cfg.floorBends, nP, r), side: split(cfg.sideReaches, nP, r), stretch: split(cfg.stretches, nP, r),
+      turn: split(cfg.turns, nP, r)
+    };
+    /* walk / jog / run bouts are cut for the whole dataset, then handed out across people */
+    var gaitFor = people.map(function () { return []; }), order = r.shuffle(people.map(function (_, i) { return i; })), gi = 0;
+    [["walking", cfg.walkMin], ["jogging", cfg.jogMin], ["running", cfg.runMin]].forEach(function (gk) {
+      bouts(gk[1] * 60, r).forEach(function (d) { gaitFor[order[gi % nP]].push({ t: "gait", k: gk[0], d: d }); gi++; });
+    });
+    var odr = cfg.odr, N = Math.round(FS / odr);
+    var out = { odr: odr, t: [], a: [[], [], []], g: [[], [], []], lab: [], seg: [], per: [], truth: { fwd: [], side: [], yaw: [], hx: [], hy: [], hz: [], seat: [], ph: [], bob: [], qrel: [] }, segs: [], bends: [] };
+    return { cfg: cfg, r: r, people: people, qMount: qMount, q: q, gaitFor: gaitFor, odr: odr, N: N, out: out, segOffset: 0, bendNo: 0, pi: 0 };
+  }
+
+  function stepPerson(ctx) {
+    if (ctx.pi >= ctx.people.length) return true;
+    var cfg = ctx.cfg, r = ctx.r, q = ctx.q, out = ctx.out, N = ctx.N, qMount = ctx.qMount, pi = ctx.pi, P = ctx.people[pi], gaitFor = ctx.gaitFor;
+    (function () {
+      var B = new Builder(), st = { fwd: P.base, side: P.sideBase, yaw: 0, hx: 0, hy: 0, hz: 0, seat: 1 };
+      /* seated actions: bends with pauses, look-alike moves, extra still postures */
+      var acts = [];
+      for (var b = 0; b < q.bends[pi]; b++) acts.push({ t: "bend" });
+      [["floor", q.floor[pi]], ["side", q.side[pi]], ["stretch", q.stretch[pi]], ["turn", q.turn[pi]]].forEach(function (o) { for (var k = 0; k < o[1]; k++) acts.push({ t: "other", k: o[0] }); });
+      for (var e = 0; e < q.extra[pi]; e++) acts.push({ t: "still", k: r.pick(["upright", "slouch", "leanback", "talk", "phone", "talk", "upright", "drink"]) });
+      r.shuffle(acts);
+      var half = Math.ceil(acts.length / 2);
+      var gaitList = r.shuffle(gaitFor[pi]);
+
+      function seatedBlock(list) {
+        still(B, st, r, P, r.uni(3, 5), "upright", cfg);
+        list.forEach(function (a) {
+          if (a.t === "bend") { var info = { no: ++ctx.bendNo }; bend(B, st, r, P, cfg, info); out.bends.push(info); still(B, st, r, P, r.uni(cfg.pauseMin, cfg.pauseMax), r() < 0.25 ? "talk" : "upright", cfg); }
+          else if (a.t === "other") { other(B, st, r, P, a.k); still(B, st, r, P, r.uni(2, 4), "upright", cfg); }
+          else still(B, st, r, P, r.uni(cfg.stillMin, cfg.stillMax), a.k, cfg);
+        });
+      }
+      seatedBlock(acts.slice(0, half));
+      if (gaitList.length) {
+        other(B, st, r, P, "standup");
+        still(B, st, r, P, r.uni(2, 4), "upright", cfg);
+        gaitList.forEach(function (gi) { gait(B, st, r, P, gi.k, gi.d); still(B, st, r, P, r.uni(2, 5), "upright", cfg); });
+        other(B, st, r, P, "sitdown");
+      }
+      seatedBlock(acts.slice(half));
+
+      /* breathing and slow postural sway on top of everything (smooth sums of sines, so
+       * they add realistic low-frequency drift without fake acceleration noise) */
+      var n = B.fwd.length, dt = 1 / FS, bp = r.uni(0, 6);
+      var sw = [[0.05, 0.12, 1.0], [0.12, 0.25, 0.7], [0.25, 0.45, 0.4], [0.45, 0.8, 0.2]].map(function (b) { return [r.uni(b[0], b[1]), b[2], r.uni(0, 6), r.uni(0, 6)]; });
+      var swN = P.sway / Math.sqrt(sw.reduce(function (s, c) { return s + c[1] * c[1] / 2; }, 0));
+      for (var i2 = 0; i2 < n; i2++) {
+        var tt = i2 * dt, sx = 0, sz = 0;
+        for (var c2 = 0; c2 < sw.length; c2++) { sx += sw[c2][1] * Math.sin(2 * Math.PI * sw[c2][0] * tt + sw[c2][2]); sz += sw[c2][1] * Math.sin(2 * Math.PI * sw[c2][0] * 0.9 * tt + sw[c2][3]); }
+        var br = Math.sin(2 * Math.PI * P.breathF * tt + bp);
+        B.fwd[i2] += swN * sx + P.breathA * br; B.side[i2] += swN * 0.7 * sz; B.hy[i2] += P.breathH * br;
+      }
+
+      /* physics: pendant pose -> accelerometer + gyroscope (true values, g and deg/s) */
+      var qs = new Array(n), qt = new Array(n), pos = new Array(n);
+      for (var j = 0; j < n; j++) {
+        var qT = torsoQuat(B.fwd[j], B.side[j], B.yaw[j]), qY = qaxis(0, 1, 0, B.yaw[j] * D2R);
+        qt[j] = qT;
+        qs[j] = qmul(qmul(cfg.coupling >= 0.999 ? qT : qslerp(qY, qT, cfg.coupling), qMount), P.mountErr);
+        var c = qrot(qT, P.chest); pos[j] = [B.hx[j] + c[0], B.hy[j] + c[1], B.hz[j] + c[2]];
+      }
+      var accT = [new Float64Array(n), new Float64Array(n), new Float64Array(n)], gyrT = [new Float64Array(n), new Float64Array(n), new Float64Array(n)];
+      for (var m = 0; m < n; m++) {
+        var a0 = Math.max(0, m - 1), a1 = Math.min(n - 1, m + 1), lin = [0, 0, 0];
+        if (m > 0 && m < n - 1) for (var d = 0; d < 3; d++) lin[d] = (pos[a1][d] - 2 * pos[m][d] + pos[a0][d]) * FS * FS / G0;
+        var fw = [lin[0] + B.ex[m], 1 + lin[1] + B.ey[m], lin[2] + B.ez[m]];
+        var fs = qrot(qconj(qs[m]), fw);
+        accT[0][m] = fs[0]; accT[1][m] = fs[1]; accT[2][m] = fs[2];
+        var dq = qmul(qconj(qs[a0]), qs[a1]); if (dq[0] < 0) dq = [-dq[0], -dq[1], -dq[2], -dq[3]];
+        var sv = Math.hypot(dq[1], dq[2], dq[3]), ang = 2 * Math.atan2(sv, dq[0]), span = (a1 - a0) / FS;
+        for (var d2 = 0; d2 < 3; d2++) gyrT[d2][m] = sv > 1e-12 ? dq[d2 + 1] / sv * ang / span * R2D : 0;
+      }
+
+      /* sensor: block average to the export rate, then offsets, gain error, noise, LSB steps, range */
+      var nb = Math.floor(n / N);
+      for (var bI = 0; bI < nb; bI++) {
+        var s0 = bI * N, mid = s0 + (N >> 1), acc = [0, 0, 0], gy = [0, 0, 0];
+        for (var x = s0; x < s0 + N; x++) for (var d3 = 0; d3 < 3; d3++) { acc[d3] += accT[d3][x]; gy[d3] += gyrT[d3][x]; }
+        for (var d4 = 0; d4 < 3; d4++) {
+          var amg = (acc[d4] / N) * 1000 * P.sens[d4] + P.aOff[d4] + P.aNoise * r.gauss();
+          amg = Math.max(-4000, Math.min(3999.878, Math.round(amg / 0.122) * 0.122));
+          out.a[d4].push(Math.round(amg));
+          var gd = (gy[d4] / N) * P.sens[d4] + P.gBias[d4] + P.gNoise * r.gauss();
+          gd = Math.max(-2000, Math.min(1999.93, Math.round(gd / 0.07) * 0.07));
+          out.g[d4].push(Math.round(gd * 100) / 100);
+        }
+        out.t.push(0);
+        out.lab.push(B.lab[mid]); out.seg.push(B.seg[mid] + ctx.segOffset); out.per.push(P.id);
+        var T = out.truth;
+        T.fwd.push(B.fwd[mid]); T.side.push(B.side[mid]); T.yaw.push(B.yaw[mid]); T.hx.push(B.hx[mid]); T.hy.push(B.hy[mid]); T.hz.push(B.hz[mid]);
+        T.seat.push(B.seat[mid]); T.ph.push(B.ph[mid]); T.bob.push(B.bob[mid]); T.qrel.push(qmul(qconj(qt[mid]), qs[mid]));
+      }
+      B.segs.forEach(function (s) { s.id += ctx.segOffset; out.segs.push(s); });
+      ctx.segOffset += B.segs.length;
+    })();
+    ctx.pi++;
+    return ctx.pi >= ctx.people.length;
+  }
+
+  function finish(ctx) {
+    var out = ctx.out, odr = ctx.odr, cfg = ctx.cfg, people = ctx.people;
+    for (var ti = 0; ti < out.lab.length; ti++) out.t[ti] = ti / odr;
+
+    /* segment runs at the export rate (one file per run) */
+    var runs = [], cur = null;
+    for (var s = 0; s < out.lab.length; s++) {
+      if (!cur || out.seg[s] !== cur.seg || out.lab[s] !== cur.lab) { if (cur) runs.push(cur); cur = { seg: out.seg[s], lab: out.lab[s], i0: s, i1: s + 1, per: out.per[s] }; }
+      else cur.i1 = s + 1;
+    }
+    if (cur) runs.push(cur);
+    var segById = {}; out.segs.forEach(function (sg) { segById[sg.id] = sg; });
+    runs.forEach(function (rn) { rn.info = segById[rn.seg] ? segById[rn.seg].info : null; });
+    out.runs = runs; out.cfg = cfg; out.people = people.map(function (p) { return { id: p.id, base_lean_deg: +p.base.toFixed(1), accel_offset_mg: p.aOff.map(function (v) { return +v.toFixed(1); }), gyro_bias_dps: p.gBias.map(function (v) { return +v.toFixed(2); }) }; });
+    out.bends.forEach(function (b) { var rn = runs.filter(function (x) { return x.info === b; })[0]; if (rn) { b.start = rn.i0 / odr; b.end = rn.i1 / odr; } });
+    out.classes = CLASSES; out.mountLabel = MOUNTS[cfg.mount].label;
+    /* where each person's session sits in the arrays */
+    out.personRange = {};
+    for (var pi2 = 0; pi2 < out.per.length; pi2++) { var pr = out.personRange[out.per[pi2]]; if (!pr) out.personRange[out.per[pi2]] = [pi2, pi2 + 1]; else pr[1] = pi2 + 1; }
+    return out;
+  }
+
+  function generate(cfgIn, onProgress) {
+    var c = start(cfgIn);
+    while (!stepPerson(c)) { if (onProgress) onProgress(c.pi / c.people.length); }
+    if (onProgress) onProgress(1);
+    return finish(c);
+  }
+
+  /* ---------- files ---------- */
+  function summary(ds) {
+    var rows = CLASSES.map(function (c) { return { label: c, files: 0, samples: 0, seconds: 0 }; });
+    var minLen = Math.round(ds.cfg.minFileSec * ds.odr);
+    ds.runs.forEach(function (rn) { var L = rn.i1 - rn.i0, row = rows[rn.lab]; row.samples += L; if (L >= minLen) row.files++; });
+    rows.forEach(function (row) { row.seconds = row.samples / ds.odr; });
+    return rows;
+  }
+  function toFiles(ds) {
+    var cfg = ds.cfg, files = [], gyro = cfg.gyro !== false, minLen = Math.round(cfg.minFileSec * ds.odr);
+    var head = cfg.header === "ms"
+      ? ["acc_x[mg]", "acc_y[mg]", "acc_z[mg]", "gyro_x[dps]", "gyro_y[dps]", "gyro_z[dps]"]
+      : ["A_X [mg]", "A_Y [mg]", "A_Z [mg]", "G_X [dps]", "G_Y [dps]", "G_Z [dps]"];
+    if (!gyro) head = head.slice(0, 3);
+    var counters = {}, manifest = ["file,label,person,start_s,end_s,samples,bend_angle_deg,plate_dir_deg,note"];
+    ds.runs.forEach(function (rn) {
+      var L = rn.i1 - rn.i0, c = CLASSES[rn.lab];
+      if (L < minLen) return;
+      counters[c] = (counters[c] || 0) + 1;
+      var name = "mems_studio/" + c + "/" + c + "_" + String(counters[c]).padStart(4, "0") + "_p" + rn.per + ".txt";
+      var lines = [head.join("\t")];
+      for (var i = rn.i0; i < rn.i1; i++) {
+        var row = [ds.a[0][i], ds.a[1][i], ds.a[2][i]];
+        if (gyro) row.push(ds.g[0][i].toFixed(2), ds.g[1][i].toFixed(2), ds.g[2][i].toFixed(2));
+        lines.push(row.join("\t"));
+      }
+      files.push({ path: name, text: lines.join("\n") + "\n" });
+      var inf = rn.info || {};
+      manifest.push([name, c, rn.per, (rn.i0 / ds.odr).toFixed(3), (rn.i1 / ds.odr).toFixed(3), L,
+        c === "bend" && inf.angle !== undefined ? inf.angle.toFixed(1) : "", c === "bend" && inf.dir !== undefined ? inf.dir.toFixed(1) : "", inf.kind || inf.style || ""].join(","));
+    });
+    files.push({ path: "files.csv", text: manifest.join("\n") + "\n" });
+
+    var all = ["time_s,person,segment,label,ax_mg,ay_mg,az_mg,gx_dps,gy_dps,gz_dps,torso_lean_deg,lean_dir_deg"];
+    for (var i = 0; i < ds.lab.length; i++) {
+      var f = ds.truth.fwd[i], s = ds.truth.side[i];
+      all.push([ds.t[i].toFixed(4), ds.per[i], ds.seg[i], CLASSES[ds.lab[i]], ds.a[0][i], ds.a[1][i], ds.a[2][i], ds.g[0][i].toFixed(2), ds.g[1][i].toFixed(2), ds.g[2][i].toFixed(2), Math.hypot(f, s).toFixed(2), (Math.atan2(s, f) * R2D).toFixed(1)].join(","));
+    }
+    files.push({ path: "all_samples_labelled.csv", text: all.join("\n") + "\n" });
+
+    var bl = ["bend_no,person,start_s,end_s,angle_deg,plate_dir_deg,down_s,hold_s,up_s,style"];
+    ds.bends.forEach(function (b) { bl.push([b.no, b.person, (b.start || 0).toFixed(3), (b.end || 0).toFixed(3), b.angle.toFixed(1), b.dir.toFixed(1), b.down.toFixed(2), b.hold.toFixed(2), b.up.toFixed(2), b.style].join(",")); });
+    files.push({ path: "bends.csv", text: bl.join("\n") + "\n" });
+
+    var sum = summary(ds);
+    files.push({ path: "dataset_info.json", text: JSON.stringify({
+      generator: "IMU Axis Playground dataset engine", sensor: "LSM6DSV16X model, accelerometer ±4 g (mg), gyroscope ±2000 dps (dps)",
+      rate_hz: ds.odr, header: head, pendant_mount: ds.mountLabel, pendant_follows_torso: cfg.coupling,
+      settings: cfg, classes: sum, people: ds.people, total_seconds: ds.lab.length / ds.odr
+    }, null, 2) });
+
+    var readme = [
+      "IGNIA BEND DATASET (simulated) - for ST MEMS Studio, Machine Learning Core",
+      "",
+      "Sensor model: LSM6DSV16X, accelerometer +-4 g in mg, gyroscope +-2000 dps in dps.",
+      "Rate: " + ds.odr + " Hz. Use the same rate as the MLC data rate in MEMS Studio.",
+      "Pendant on the chest: " + ds.mountLabel + ". Bend angles " + cfg.bendMin + "-" + cfg.bendMax + " deg toward the plate (+-" + cfg.plateSpread + " deg left/right).",
+      "",
+      "mems_studio/<label>/  one file per activity segment, tab separated, header row with units,",
+      "                      exactly one class per file (ST's recommended layout).",
+      "Labels: " + CLASSES.join(", ") + "  (letters only, as MEMS Studio requires).",
+      "",
+      "In MEMS Studio > Machine Learning Core > Data patterns:",
+      "  1. Load all files of one folder, select them all, type the label once (e.g. bend).",
+      "  2. Repeat for every folder.",
+      "  3. Configuration: data rate " + ds.odr + " Hz, accelerometer full scale 4 g" + (gyro ? ", gyroscope 2000 dps" : "") + ".",
+      "     Window: " + cfg.minFileSec + " s (" + Math.round(cfg.minFileSec * ds.odr) + " samples). Every file here is at least that long.",
+      "     Features to start with: mean, variance and peak-to-peak of each accelerometer axis; mean, variance and",
+      "     peak-to-peak of the accelerometer norm" + (gyro ? "; mean, variance and peak-to-peak of the gyroscope norm" : "") + ".",
+      "     Running can touch the +-4 g limit for a few samples, as on a real chest-worn sensor.",
+      "",
+      "Other files: all_samples_labelled.csv (every sample with its label and the true torso lean),",
+      "bends.csv (angle, plate direction and timing of every bend), files.csv (which file is which),",
+      "dataset_info.json (all settings, so the same seed rebuilds the same data).",
+      "",
+      "IMPORTANT: this data is simulated. Use it to learn the MEMS Studio workflow and as a starting set.",
+      "Before trusting the model, record real data from the pendant in the same format and retrain or mix."
+    ].join("\n");
+    files.push({ path: "README.txt", text: readme + "\n" });
+    return files;
+  }
+
+  return { defaults: defaults, generate: generate, start: start, stepPerson: stepPerson, finish: finish, toFiles: toFiles, summary: summary, CLASSES: CLASSES, MOUNTS: MOUNTS, torsoQuat: torsoQuat, qmul: qmul, qFromBasis: qFromBasis, FS: FS };
+})();
+if (typeof module !== "undefined") module.exports = IMUDS;
+// ENGINE END
+</script>
+<script>
+(function () {
+  "use strict";
+  var T = window.THREE;
+  var $ = function (id) { return document.getElementById(id); };
+  var view = $("view"), captionEl = $("caption");
+  var reduceMotion = !!(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
+  function tok(n) { return getComputedStyle(document.documentElement).getPropertyValue(n).trim() || "#888"; }
+  function store(k, v) { try { if (v === undefined) return JSON.parse(localStorage.getItem("imuplay." + k)); localStorage.setItem("imuplay." + k, JSON.stringify(v)); } catch (e) { return null; } }
+
+  /* ---------------- chip axes <-> three.js local frame ----------------
+   * The board lies in its local XZ plane, top face toward local +Y.
+   * chip X = local +X,  chip Y = local -Z,  chip Z = local +Y (right-handed). */
+  var CHIP = { x: new T.Vector3(1, 0, 0), y: new T.Vector3(0, 0, -1), z: new T.Vector3(0, 1, 0) };
+  function chipToLocal(v) { return new T.Vector3(v[0], v[2], -v[1]); }
+  function localToChip(v) { return [v.x, -v.z, v.y]; }
+  var UP = new T.Vector3(0, 1, 0);
+
+  /* ---------------- scene ---------------- */
+  var renderer = new T.WebGLRenderer({ antialias: true, alpha: true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  renderer.setClearColor(0x000000, 0);
+  view.insertBefore(renderer.domElement, view.firstChild);
+  var scene = new T.Scene();
+  var camera = new T.PerspectiveCamera(38, 16 / 11, 0.1, 100);
+  scene.add(new T.AmbientLight(0xffffff, 0.75));
+  var sun = new T.DirectionalLight(0xffffff, 0.75); sun.position.set(3, 6, 4); scene.add(sun);
+
+  var rig = new T.Group(); scene.add(rig);              // what the motions turn (board, or person + pendant)
+  var mount = new T.Group(); rig.add(mount);            // where the board sits on the rig
+  var board = new T.Group(); mount.add(board);
+
+  var mats = {
+    pcb: new T.MeshStandardMaterial({ roughness: 0.7, transparent: true, opacity: 0.8, depthWrite: false }), chip: new T.MeshStandardMaterial({ roughness: 0.5 }),
+    skin: new T.MeshStandardMaterial({ roughness: 0.85 }), cloth: new T.MeshStandardMaterial({ roughness: 0.9 }),
+    table: new T.MeshStandardMaterial({ roughness: 0.8 }), plate: new T.MeshStandardMaterial({ color: 0xf2f2f2, roughness: 0.4 })
+  };
+  board.add(new T.Mesh(new T.BoxGeometry(2.4, 0.1, 1.6), mats.pcb));
+  var chip = new T.Mesh(new T.BoxGeometry(0.62, 0.08, 0.62), mats.chip); chip.position.y = 0.09; board.add(chip);
+
+  function textTexture(text, color, w, h, px) {
+    var c = document.createElement("canvas"); c.width = w; c.height = h;
+    var g = c.getContext("2d"); g.fillStyle = color;
+    g.font = "600 " + px + "px 'IBM Plex Mono', Menlo, monospace"; g.textAlign = "center"; g.textBaseline = "middle";
+    g.fillText(text, w / 2, h / 2);
+    var t = new T.CanvasTexture(c); t.anisotropy = 4; return t;
+  }
+  var chipLabelMat = new T.MeshBasicMaterial({ transparent: true });
+  var chipLabel = new T.Mesh(new T.PlaneGeometry(0.6, 0.15), chipLabelMat); chipLabel.rotation.x = -Math.PI / 2; chipLabel.position.y = 0.135; board.add(chipLabel);
+
+  var AX_ORIGIN = new T.Vector3(0, 0.15, 0);
+  function axisArrow(dir) { var a = new T.ArrowHelper(dir.clone(), AX_ORIGIN.clone(), 1.55, 0xffffff, 0.22, 0.13); board.add(a); return a; }
+  var arrows = { x: axisArrow(CHIP.x), y: axisArrow(CHIP.y), z: axisArrow(CHIP.z) };
+  /* draw the chip's arrows on top of everything, so they stay visible when the chip faces down */
+  [arrows.x, arrows.y, arrows.z].forEach(function (a) { a.line.material.depthTest = false; a.cone.material.depthTest = false; a.renderOrder = a.line.renderOrder = a.cone.renderOrder = 5; });
+  function sprite(text) { var s = new T.Sprite(new T.SpriteMaterial({ transparent: true, depthTest: false })); s.renderOrder = 10; s.userData.text = text; return s; }
+  var lab = { x: sprite("X"), y: sprite("Y"), z: sprite("Z") };
+  ["x", "y", "z"].forEach(function (k) { lab[k].position.copy(CHIP[k]).multiplyScalar(1.82).add(AX_ORIGIN); board.add(lab[k]); });
+
+  /* ball in a box: the accelerometer's proof mass, pushed opposite to the reading */
+  var ballBox = new T.Group(); ballBox.position.set(-0.82, 0.46, 0.42); board.add(ballBox);
+  var boxLines = new T.LineSegments(new T.EdgesGeometry(new T.BoxGeometry(0.7, 0.7, 0.7)), new T.LineBasicMaterial({ transparent: true, opacity: 0.8 }));
+  ballBox.add(boxLines);
+  var ballMat = new T.MeshStandardMaterial({ roughness: 0.35 });
+  var ball = new T.Mesh(new T.SphereGeometry(0.075, 20, 14), ballMat); ballBox.add(ball);
+  var springGeo = new T.BufferGeometry(); springGeo.setAttribute("position", new T.Float32BufferAttribute(new Float32Array(36), 3));
+  var springs = new T.LineSegments(springGeo, new T.LineBasicMaterial({ transparent: true, opacity: 0.7 })); ballBox.add(springs);
+  var FACES = [[0.35, 0, 0], [-0.35, 0, 0], [0, 0.35, 0], [0, -0.35, 0], [0, 0, 0.35], [0, 0, -0.35]];
+
+  /* person (pendant mode) */
+  var person = new T.Group(); rig.add(person); person.visible = false;
+  var torso = new T.Mesh(new T.BoxGeometry(0.46, 1.25, 0.78), mats.cloth); torso.position.set(0, 0.62, 0); person.add(torso);
+  var neck = new T.Mesh(new T.CylinderGeometry(0.1, 0.11, 0.2, 16), mats.skin); neck.position.set(0, 1.33, 0); person.add(neck);
+  var head = new T.Mesh(new T.SphereGeometry(0.26, 24, 18), mats.skin); head.position.set(0.02, 1.62, 0); person.add(head);
+  var nose = new T.Mesh(new T.ConeGeometry(0.05, 0.12, 12), mats.skin); nose.rotation.z = -Math.PI / 2; nose.position.set(0.29, 1.62, 0); person.add(nose);
+  var arms = [-1, 1].map(function (s) { var pv = new T.Group(); pv.position.set(0.02, 1.17, s * 0.49); person.add(pv); var arm = new T.Mesh(new T.BoxGeometry(0.17, 0.95, 0.17), mats.cloth); arm.position.y = -0.47; pv.add(arm); return pv; });
+  var chainGeo = new T.BufferGeometry(); chainGeo.setAttribute("position", new T.Float32BufferAttribute([0.12, 1.3, 0.13, 0.31, 1.15, 0.02, 0.12, 1.3, -0.13, 0.31, 1.15, -0.02], 3));
+  var chain = new T.LineSegments(chainGeo, new T.LineBasicMaterial({ color: 0x9aa4ad })); person.add(chain);
+  var table = new T.Group(); scene.add(table); table.visible = false;
+  var top = new T.Mesh(new T.BoxGeometry(1.4, 0.08, 1.6), mats.table); top.position.set(1.45, -0.32, 0); table.add(top);
+  var plate = new T.Mesh(new T.CylinderGeometry(0.28, 0.24, 0.04, 28), mats.plate); plate.position.set(1.25, -0.26, 0); table.add(plate);
+
+  /* seated scene for the Dataset tab: chair, legs, table legs, food, target ring */
+  var seatScene = new T.Group(); scene.add(seatScene); seatScene.visible = false;
+  mats.wood = new T.MeshStandardMaterial({ roughness: 0.75 });
+  mats.pants = new T.MeshStandardMaterial({ roughness: 0.9 });
+  mats.shoe = new T.MeshStandardMaterial({ roughness: 0.6 });
+  function box(w, h, d, mat, x, y, z, parent) { var m = new T.Mesh(new T.BoxGeometry(w, h, d), mat); m.position.set(x, y, z); (parent || seatScene).add(m); return m; }
+  box(0.8, 0.07, 0.82, mats.wood, -0.6, -1.02, 0);                                   // chair seat
+  box(0.07, 0.68, 0.82, mats.wood, -1.0, -0.68, 0);                                  // low backrest
+  [[-0.95, -0.36], [-0.95, 0.36], [-0.27, -0.36], [-0.27, 0.36]].forEach(function (p) { box(0.06, 0.95, 0.06, mats.wood, p[0], -1.53, p[1]); });
+  [[0.85, -0.7], [0.85, 0.7], [2.05, -0.7], [2.05, 0.7]].forEach(function (p) { box(0.07, 1.64, 0.07, mats.table, p[0], -1.18, p[1]); });
+  var foodMats = [0xd2492f, 0x5c9e3a, 0xe0b23a].map(function (c) { return new T.MeshStandardMaterial({ color: c, roughness: 0.6 }); });
+  [[1.18, -0.08, 0], [1.3, 0.08, 1], [1.16, 0.12, 2], [1.28, -0.12, 1]].forEach(function (p) { var m = new T.Mesh(new T.SphereGeometry(0.065, 14, 10), foodMats[p[2]]); m.position.set(p[0], -0.2, p[1]); seatScene.add(m); });
+  [-1, 1].forEach(function (s) {          // side dishes, about 22° left and right of the plate
+    var bowl = new T.Mesh(new T.CylinderGeometry(0.17, 0.12, 0.09, 24), mats.plate); bowl.position.set(1.07, -0.24, s * 0.66); seatScene.add(bowl);
+    var f = new T.Mesh(new T.SphereGeometry(0.07, 12, 8), foodMats[s > 0 ? 2 : 1]); f.position.set(1.07, -0.18, s * 0.66); seatScene.add(f);
+  });
+  var targetRing = new T.Group(); targetRing.visible = false; seatScene.add(targetRing);
+  targetRing.material = new T.MeshBasicMaterial({ color: 0xffffff });
+  (function () { var ring = new T.Mesh(new T.TorusGeometry(0.15, 0.025, 10, 32), targetRing.material); ring.rotation.x = -Math.PI / 2; targetRing.add(ring);
+    var cone = new T.Mesh(new T.ConeGeometry(0.07, 0.2, 16), targetRing.material); cone.rotation.x = Math.PI; cone.position.y = 0.32; targetRing.add(cone); })();
+  var legs = new T.Group(); seatScene.add(legs);
+  function makeLeg(z) {
+    var thigh = new T.Group(); thigh.position.set(0, 0, z); legs.add(thigh);
+    box(0.21, 1.0, 0.21, mats.pants, 0, -0.5, 0, thigh);
+    var knee = new T.Group(); knee.position.y = -1.0; thigh.add(knee);
+    box(0.17, 1.0, 0.17, mats.pants, 0, -0.5, 0, knee);
+    box(0.32, 0.07, 0.15, mats.shoe, 0.08, -1.03, 0, knee);
+    return { thigh: thigh, knee: knee };
+  }
+  var legParts = [makeLeg(-0.13), makeLeg(0.13)];
+
+  /* world arrows */
+  var gravArrow = new T.ArrowHelper(new T.Vector3(0, -1, 0), new T.Vector3(-2.55, 1.35, -0.4), 1.25, 0xffffff, 0.22, 0.13); scene.add(gravArrow);
+  var gravLab = sprite("gravity"); gravLab.position.set(-2.55, 1.6, -0.4); scene.add(gravLab);
+  var readArrow = new T.ArrowHelper(new T.Vector3(0, 1, 0), new T.Vector3(), 1.3, 0xffffff, 0.24, 0.15); scene.add(readArrow);
+  var readLab = sprite("reading"); scene.add(readLab);
+  var grid = null;
+
+  var labelScale = 1;
+  function sizeSprites() {
+    [lab.x, lab.y, lab.z].forEach(function (s) { s.scale.set(0.42 * labelScale, 0.4 * labelScale, 1); });
+    gravLab.scale.set(1.2, 0.4, 1); readLab.scale.set(1.2, 0.4, 1);
+  }
+  function applyTheme() {
+    arrows.x.setColor(new T.Color(tok("--x"))); arrows.y.setColor(new T.Color(tok("--y"))); arrows.z.setColor(new T.Color(tok("--z")));
+    gravArrow.setColor(new T.Color(tok("--grav"))); readArrow.setColor(new T.Color(tok("--accent")));
+    mats.pcb.color.set(tok("--pcb")); mats.chip.color.set(tok("--chip")); mats.skin.color.set(tok("--skin")); mats.cloth.color.set(tok("--cloth")); mats.table.color.set(tok("--table"));
+    mats.wood.color.set(tok("--wood")); mats.pants.color.set(tok("--pants")); mats.shoe.color.set(tok("--shoe")); targetRing.material.color.set(tok("--c-bend"));
+    ballMat.color.set(tok("--accent")); boxLines.material.color.set(tok("--muted")); springs.material.color.set(tok("--muted"));
+    [[lab.x, "--x"], [lab.y, "--y"], [lab.z, "--z"], [gravLab, "--grav"], [readLab, "--accent"]].forEach(function (p) {
+      var s = p[0], wide = s.userData.text.length > 1;
+      if (s.material.map) s.material.map.dispose();
+      s.material.map = textTexture(s.userData.text, tok(p[1]), wide ? 384 : 128, 128, wide ? 40 : 64);
+      s.material.needsUpdate = true;
+    });
+    sizeSprites();
+    if (chipLabelMat.map) chipLabelMat.map.dispose();
+    chipLabelMat.map = textTexture("LSM6DSV16X", "#c9d1d9", 512, 128, 64); chipLabelMat.needsUpdate = true;
+    if (grid) scene.remove(grid);
+    grid = new T.GridHelper(14, 28, tok("--grid"), tok("--grid")); grid.position.y = -2.0; scene.add(grid);
+    drawCharts(); drawDsCharts(); drawStrip();
+  }
+
+  /* ---------------- state ---------------- */
+  var mode = "board";
+  var q = new T.Quaternion();            // rig orientation
+  var qMount = new T.Quaternion();       // board on the rig
+  var qBoardPrev = new T.Quaternion();
+  var lin = new T.Vector3();             // pushes on the board other than gravity's support, world frame, in g
+  var rigPos = new T.Vector3();
+  var bob = new T.Vector3();
+  var motion = null, paused = false;
+  var accRange = 4, gyrRange = 2000;
+  var ACC_SENS = { 2: 0.061, 4: 0.122, 8: 0.244, 16: 0.488 };        // mg per count
+  var GYR_SENS = { 125: 4.375, 250: 8.75, 500: 17.5, 1000: 35, 2000: 70, 4000: 140 }; // mdps per count
+  var accTrue = [0, 0, 1], gyroTrue = [0, 0, 0], gyroShown = [0, 0, 0];
+  var dataSample = null;                 // when replaying the user's log
+  var history = [];                      // {t, a:[3], g:[3]}
+  var clock = 0;
+
+  var PERSON_MOUNT = new T.Quaternion().setFromRotationMatrix(new T.Matrix4().makeBasis(new T.Vector3(0, 1, 0), new T.Vector3(1, 0, 0), new T.Vector3(0, 0, -1)));
+
+  /* Board-mode camera, and two frames derived from it:
+   *  HOME  - your real board on the table: chip Z down into the table, Y to the
+   *          screen's left, X toward you (level).  Reset returns here.
+   *  VIEW  - right / up / toward-you as seen on screen; the sliders tilt the
+   *          board around these, starting from HOME. */
+  var BOARD_CAM = new T.Vector3(1.6, 3.2, 5.2), BOARD_TARGET = new T.Vector3(-0.3, -0.1, 0);
+  var V_TOWARD = BOARD_CAM.clone().sub(BOARD_TARGET); V_TOWARD.y = 0; V_TOWARD.normalize();   // level, toward the viewer
+  var V_RIGHT = new T.Vector3().crossVectors(UP, V_TOWARD).normalize();                        // level, screen right
+  var Q_VIEW = new T.Quaternion().setFromRotationMatrix(new T.Matrix4().makeBasis(V_RIGHT.clone(), UP.clone(), V_TOWARD.clone()));
+  /* Home poses. A real chip is right-handed (Y = Z x X), so only some combinations exist:
+   * with Z down, "X into the screen" forces Y right, and "Y left" forces X toward you. */
+  function chipPose(xDir, zDir) {       // chip X -> xDir, chip Z -> zDir (world); chip Y follows
+    var x = xDir.clone().normalize(), z = zDir.clone().normalize();
+    return new T.Quaternion().setFromRotationMatrix(new T.Matrix4().makeBasis(x, z, new T.Vector3().crossVectors(x, z)));
+  }
+  var AWAY = V_TOWARD.clone().negate().applyAxisAngle(UP, -Math.PI / 12);   // into the screen, slightly turned for depth
+  var TOWARD = V_TOWARD.clone().applyAxisAngle(UP, Math.PI / 6);           // toward you, turned so it does not cover Z
+  var DOWN = UP.clone().negate();
+  var HOMES = {
+    a: { label: "Chip down · X into the screen · Y right", z: -1, q: chipPose(AWAY, DOWN), text: "Home: chip facing down. Z points down (−1 g), X into the screen, Y to the right." },
+    b: { label: "Chip down · X toward you · Y left", z: -1, q: chipPose(TOWARD, DOWN), text: "Home: chip facing down. Z points down (−1 g), X toward you, Y to the left." },
+    c: { label: "Chip up · X into the screen · Y left", z: 1, q: chipPose(AWAY, UP), text: "Home: chip facing up. Z points up (+1 g), X into the screen, Y to the left." }
+  };
+  var homeKey = store("home"); if (!HOMES[homeKey]) homeKey = "a";
+  var Q_HOME = HOMES[homeKey].q.clone();
+
+  function setMode(m) {
+    mode = m; motion = null; lin.set(0, 0, 0); bob.set(0, 0, 0);
+    if (m === "board") q.copy(Q_HOME); else q.identity();
+    var p = m !== "board", s = m === "seated";
+    person.visible = p; table.visible = p; seatScene.visible = s; targetRing.visible = false;
+    qMount.copy(m === "board" ? new T.Quaternion() : (s ? dsMountQuat() : PERSON_MOUNT));
+    mount.quaternion.copy(qMount);
+    mount.position.set(p ? 0.33 : 0, p ? 0.72 : 0, 0);
+    var sc = p ? 0.36 : 1; mount.scale.set(sc, sc, sc);
+    labelScale = p ? 2.4 : 1; sizeSprites();
+    rigPos.set(p ? -0.55 : 0, p ? -0.95 : 0, 0);
+    poseLimbs(0, 0, 0, 0, 0); $("badge").hidden = true;
+    gravArrow.position.set(s ? 2.7 : -2.55, s ? 1.1 : 1.35, s ? -1.0 : -0.4); gravLab.position.set(s ? 2.7 : -2.55, s ? 1.35 : 1.6, s ? -1.0 : -0.4);
+    $("mode-board").setAttribute("aria-pressed", String(m === "board")); $("mode-person").setAttribute("aria-pressed", String(m === "person"));
+    $("board-controls").hidden = p; $("person-controls").hidden = !p;
+    $("hint").textContent = s ? "drag to look around" : (p ? "drag to turn the person" : "drag to turn it");
+    syncBoardPrev(); resize();
+    setCaption(s ? "Sitting at the table with the pendant on the chest. Press ▶ Random bend." : (p ? "Sitting upright with the pendant on the chest." : HOMES[homeKey].text));
+  }
+  function boardWorldQuat() { return q.clone().multiply(qMount); }
+  function syncBoardPrev() { qBoardPrev.copy(boardWorldQuat()); }
+
+  function resize() {
+    var w = view.clientWidth, h = view.clientHeight; if (!w || !h) return;
+    renderer.setSize(w, h, false); camera.aspect = w / h;
+    var far = camera.aspect < 1.15 ? 1.3 : 1.0;
+    if (mode === "seated") placeSeatedCamera();
+    else if (mode === "person") { var pf = camera.aspect < 1.15 ? 0.95 : 1.0; camera.position.set(0.9 * pf, 1.3 * pf, 5.2 * pf); camera.lookAt(0.2, 0.0, 0); }
+    else { camera.position.copy(BOARD_CAM).sub(BOARD_TARGET).multiplyScalar(far).add(BOARD_TARGET); camera.lookAt(BOARD_TARGET); }
+    camera.updateProjectionMatrix();
+  }
+
+  /* ---------------- motions: step(dt) -> true when finished ---------------- */
+  function setCaption(t) { captionEl.textContent = t; }
+  function mCap(t) { return { step: function () { setCaption(t); return true; } }; }
+  function mDo(fn) { return { step: function () { fn(); return true; } }; }
+  function mWait(s) { var t = 0; return { step: function (dt) { t += dt; return t >= s; } }; }
+  function ease(k) { return k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2; }
+  function mPose(target, dur) {
+    var from = null, t = 0; dur = reduceMotion ? 0.001 : dur;
+    return { step: function (dt) { if (!from) from = q.clone(); t += dt; var k = Math.min(1, t / dur); q.copy(from).slerp(target, ease(k)); return k >= 1; } };
+  }
+  function mSpin(axis, deg, dur) {        // turn around the chip's own arrow (board mode)
+    var t = 0, rate = deg / dur;
+    return { step: function (dt) { var d = Math.min(dt, dur - t); t += d; q.multiply(new T.Quaternion().setFromAxisAngle(CHIP[axis], d * rate * Math.PI / 180)); return t >= dur - 1e-6; } };
+  }
+  function mWorldSpin(axisW, deg, dur) {  // turn around a room direction (person turning around)
+    var t = 0, rate = deg / dur;
+    return { step: function (dt) { var d = Math.min(dt, dur - t); t += d; q.premultiply(new T.Quaternion().setFromAxisAngle(axisW, d * rate * Math.PI / 180)); return t >= dur - 1e-6; } };
+  }
+  function mShake(dur) {
+    var t = 0;
+    return { step: function (dt) {
+      t += dt; var a = 2 * Math.PI;
+      lin.set(0.85 * Math.sin(a * 3.1 * t), 0.65 * Math.sin(a * 2.3 * t + 1), 0.75 * Math.sin(a * 3.7 * t + 2));
+      bob.copy(lin).multiplyScalar(-0.07);
+      if (t >= dur) { lin.set(0, 0, 0); bob.set(0, 0, 0); return true; } return false;
+    } };
+  }
+  function mDrop() {
+    var t = 0;
+    return { step: function (dt) {
+      t += dt;
+      if (t < 0.55) { lin.set(0, -1, 0); bob.set(0, -2.4 * t * t, 0); setCaption("Falling: nothing pushes the chip, so it reads 0 g. The ball floats."); }
+      else if (t < 0.7) { lin.set(0, 2.2, 0); setCaption("Caught: a hard push up, about 3 g."); }
+      else if (t < 1.5) { lin.set(0, 0, 0); bob.y *= Math.pow(0.02, dt); }
+      else { lin.set(0, 0, 0); bob.set(0, 0, 0); setCaption("Resting again: 1 g."); return true; }
+      return false;
+    } };
+  }
+  function mGait(dur, amp, hz, leanDeg, swayDeg, label) {
+    var t = 0, base = null;
+    return { step: function (dt) {
+      if (!base) base = q.clone();
+      t += dt; var ph = 2 * Math.PI * hz * t, k = Math.min(1, t / 0.8);
+      lin.set(0, amp * (Math.sin(ph) + 0.3 * Math.sin(2 * ph + 0.5)), 0.12 * amp * Math.sin(ph / 2));
+      bob.set(0, -0.035 * amp * Math.sin(ph), 0);
+      var lean = new T.Quaternion().setFromAxisAngle(new T.Vector3(0, 0, 1), -(leanDeg * k + swayDeg * Math.sin(ph)) * Math.PI / 180);
+      var roll = new T.Quaternion().setFromAxisAngle(new T.Vector3(1, 0, 0), (swayDeg * 0.6 * Math.sin(ph / 2)) * Math.PI / 180);
+      q.copy(base).multiply(lean).multiply(roll);
+      setCaption(label + " · " + hz.toFixed(1) + " steps per second");
+      if (t >= dur) { lin.set(0, 0, 0); bob.set(0, 0, 0); return true; } return false;
+    } };
+  }
+  function mSeq(list) { var i = 0; return { step: function (dt) { while (i < list.length) { if (list[i].step(dt)) { i++; dt = 0; } else return false; } return true; } }; }
+  function run(m) { lin.set(0, 0, 0); bob.set(0, 0, 0); stopData(); motion = m; if (paused) togglePause(); }
+
+  function poseFromUp(chipUp) { return new T.Quaternion().setFromUnitVectors(chipToLocal(chipUp).normalize(), UP); }
+  var POSES = {
+    flat: new T.Quaternion(), down: new T.Quaternion().setFromAxisAngle(CHIP.x, Math.PI),
+    home: Q_HOME,
+    xup: poseFromUp([1, 0, 0]), yup: poseFromUp([0, 1, 0]), log: poseFromUp([0.861, 0.072, -0.481]),
+    tilt30: poseFromUp([0.5, 0, Math.sqrt(3) / 2])
+  };
+  function bodyPose(fwdDeg, sideDeg) {
+    var a = new T.Quaternion().setFromAxisAngle(new T.Vector3(0, 0, 1), -fwdDeg * Math.PI / 180);
+    var b = new T.Quaternion().setFromAxisAngle(new T.Vector3(1, 0, 0), sideDeg * Math.PI / 180);
+    return a.multiply(b);
+  }
+  var ACTS = {
+    upright: function () { return mSeq([mCap("Sitting upright: X points up, so X reads about +1 g."), mPose(bodyPose(0, 0), 1.0)]); },
+    plate: function () { return mSeq([mCap("Leaning 28° to the plate: the 1 g slides from X toward Z (Z goes negative)."), mPose(bodyPose(28, 0), 1.2), mWait(0.6), mCap("Holding the lean: gyro back to 0, accelerometer stays tilted. imu_s3 would say BEND.")]); },
+    back: function () { return mSeq([mCap("Leaning back 20°: Z goes positive. Same tilt size, opposite direction."), mPose(bodyPose(-20, 0), 1.2)]); },
+    side: function () { return mSeq([mCap("Leaning sideways 20°: the 1 g slides from X into Y."), mPose(bodyPose(0, 22), 1.2)]); },
+    floor: function () { return mSeq([mCap("Bending to the floor: X drops toward 0, nearly all of the 1 g on Z."), mPose(bodyPose(80, 0), 1.8)]); },
+    walk: function () { return mSeq([mPose(bodyPose(0, 0), 0.6), mGait(6, 0.3, 1.9, 4, 2, "Walking: the total bounces a little above and below 1 g with every step"), mCap("Stopped walking.")]); },
+    jog: function () { return mSeq([mPose(bodyPose(0, 0), 0.6), mGait(6, 0.75, 2.6, 9, 4, "Jogging: bigger bounce, faster steps"), mCap("Stopped jogging.")]); },
+    run: function () { return mSeq([mPose(bodyPose(0, 0), 0.6), mGait(6, 1.45, 3.0, 14, 6, "Running: big bounce, fastest steps"), mCap("Stopped running.")]); },
+    turn: function () { return mSeq([mPose(bodyPose(0, 0), 0.6), mCap("Turning around on the spot at 90 °/s: only gyro X (the arrow pointing up) sees it."), mWorldSpin(UP, 180, 2.0), mCap("Turned around. The accelerometer never changed.")]); }
+  };
+
+  /* ---------------- learn ---------------- */
+  var STEPS = [
+    { mode: "board", title: "Three arrows on the chip",
+      say: "The chip has three arrows painted on it: X (red), Y (green) and Z (blue). Z sticks straight out of the chip's top.",
+      ask: "If the board turns, what do the arrows do?", options: ["Keep pointing the same way in the room", "Turn with the board"], correct: 1,
+      show: function () { return mSeq([mPose(POSES.flat, 0.6), mCap("Turning the board around Z. Watch X and Y swing round with it."), mSpin("z", 90, 1.8), mCap("Now around X. Y and Z tip over with the board."), mSpin("x", 60, 1.4), mCap("The arrows go wherever the chip goes.")]); },
+      explain: "The arrows are glued to the chip. Every number the sensor gives is measured along these arrows, wherever they happen to point right now." },
+    { mode: "board", title: "Flat on a table",
+      say: "The board lies flat. The Z arrow points at the ceiling.",
+      ask: "What does the accelerometer read on Z?", options: ["0 g", "+1 g", "−1 g"], correct: 1,
+      show: function () { return mSeq([mCap("Flat on the table."), mPose(POSES.flat, 0.8)]); },
+      explain: "+1 g. When it is still, the accelerometer reads +1 g on whichever arrow points up. It feels the table pushing the chip up. Look at the ball in the box: it sits on the spring underneath it." },
+    { mode: "board", title: "Upside down",
+      say: "Now flip the board over.",
+      ask: "What does Z read now?", options: ["+1 g", "0 g", "−1 g"], correct: 2,
+      show: function () { return mSeq([mPose(POSES.flat, 0.5), mCap("Flipping it over."), mPose(POSES.down, 1.2)]); },
+      explain: "−1 g. Z now points at the floor, so the push is against the arrow. Plus means \"along the arrow\", minus means \"against it\"." },
+    { mode: "board", title: "Standing on an edge",
+      say: "Stand the board on an edge so the X arrow points at the ceiling.",
+      ask: "Which arrow gets the 1 g now?", options: ["X", "Y", "Z"], correct: 0,
+      show: function () { return mSeq([mPose(POSES.flat, 0.5), mCap("Standing it on an edge, X up."), mPose(POSES.xup, 1.2)]); },
+      explain: "X. Whichever arrow points up gets +1 g, and the other two read 0. Try Y up in Play." },
+    { mode: "board", title: "Half-way tilt",
+      say: "Tilt it 30°, part of the way between flat and X up.",
+      ask: "What happens to the 1 g?", options: ["It all stays on Z", "It gets shared between Z and X", "It disappears"], correct: 1,
+      show: function () { return mSeq([mPose(POSES.flat, 0.5), mCap("Tilting 30°."), mPose(POSES.tilt30, 1.4), mCap("Z = 0.87, X = 0.50. Total still 1.00 g.")]); },
+      explain: "Shared: Z ≈ 0.87 and X ≈ 0.50. Square them and add: 0.75 + 0.25 = 1. The total stays 1 g, and the way it is shared tells you the tilt angle. That is how imu_s3 measures tilt." },
+    { mode: "board", title: "Tilted, or moving?",
+      say: "The board is tilted 30° and the total reads exactly 1.00 g.",
+      ask: "Is the board moving?", options: ["Yes", "No, it is just tilted and still"], correct: 1,
+      show: function () { return mSeq([mPose(POSES.tilt30, 0.6), mCap("Still: total 1.00 g."), mWait(1.2), mCap("Now shaking: the total jumps around 1 g."), mShake(1.8), mCap("Still again: back to 1.00 g.")]); },
+      explain: "Still. A total of 1 g means nothing is pushing it. When I shook it, the total jumped above and below 1 g. That jumping is what imu_s3 calls motion." },
+    { mode: "board", title: "The gyroscope",
+      say: "Now the second sensor. I will turn the board around the X arrow at 60 degrees every second.",
+      ask: "While it turns, what does gyro X show?", options: ["0", "+60 °/s", "+1 g"], correct: 1,
+      show: function () { return mSeq([mPose(POSES.flat, 0.5), mCap("Turning around X at 60 °/s."), mSpin("x", 60, 1.0), mCap("Stopped.")]); },
+      explain: "+60 °/s. The gyroscope measures how fast the board turns around each arrow, in degrees per second." },
+    { mode: "board", title: "Stop turning",
+      say: "The board stops, still tilted 60°.",
+      ask: "What does the gyro show now?", options: ["Still +60 °/s", "0", "60° (the angle)"], correct: 1,
+      show: function () { return mSeq([mPose(POSES.flat, 0.5), mCap("Turning around X at 60 °/s..."), mSpin("x", 60, 1.0), mCap("...stopped. Tilted 60°, gyro 0."), mWait(2.5)]); },
+      explain: "0. The gyro only reports turning speed, never the angle. For the angle you look at the accelerometer: it still shows the tilt." },
+    { mode: "board", title: "Spin it flat",
+      say: "Spin the board flat on the table, around Z, like a record.",
+      ask: "Does the accelerometer change?", options: ["Yes", "No"], correct: 1,
+      show: function () { return mSeq([mPose(POSES.flat, 0.5), mCap("Spinning flat at 120 °/s. Watch the accelerometer: no change."), mSpin("z", 360, 3.0), mCap("Only gyro Z saw that turn.")]); },
+      explain: "No. \"Up\" is still up, so the accelerometer cannot see this turn. Only gyro Z shows it. That is why an IMU has both sensors." },
+    { mode: "board", title: "Falling",
+      say: "I drop the board and catch it.",
+      ask: "While it falls, what does the accelerometer read?", options: ["1 g", "0 g", "2 g"], correct: 1,
+      show: function () { return mSeq([mPose(POSES.flat, 0.5), mDrop()]); },
+      explain: "0 g. While it falls nothing pushes the chip, so the ball floats in the middle. The catch is a hard push: about 3 g." },
+    { mode: "person", title: "On your chest",
+      say: "Now the board is your pendant. X points up your body and Z points forward out of your chest. That is why your log showed X near +1 g.",
+      ask: "You lean to your plate. Which sensor tells you how far you leaned?", options: ["Accelerometer (where the 1 g goes)", "Gyroscope"], correct: 0,
+      show: function () { return mSeq([mPose(bodyPose(0, 0), 0.6), mCap("Sitting upright: X ≈ +1 g."), mWait(1.0), mCap("Leaning to the plate..."), mPose(bodyPose(28, 0), 1.3), mCap("Holding: X ≈ +0.88, Z ≈ −0.47. Gyro back to 0."), mWait(1.5), mPose(bodyPose(0, 0), 1.2), mCap("Back upright.")]); },
+      explain: "The accelerometer. The 1 g moves from X toward Z as you lean, and imu_s3 turns that into the tilt number. The gyro only jumped while you were moving." },
+    { mode: "person", title: "Walking",
+      say: "Now the same person walks.",
+      ask: "What tells imu_s3 you are walking, not leaning?", options: ["The total bounces with every step", "Gyro Z reads 90 °/s"], correct: 0,
+      show: function () { return ACTS.walk(); },
+      explain: "The bounce. Every step pushes the total above and below 1 g; watch the graph. A big bounce means motion, and counting the bounces gives steps per second." },
+    { mode: "board", title: "Raw numbers",
+      say: "The chip sends whole numbers called counts. Your chip is set to ±4 g.",
+      ask: "How many counts is 1 g?", options: ["1000", "8197", "32767"], correct: 1,
+      show: function () { return mSeq([mCap("Flat: Z = +1 g = 8197 counts."), mPose(POSES.flat, 0.8)]); },
+      explain: "8197. At ±4 g one count is 0.122 mg, so 1 g = 1 ÷ 0.000122 ≈ 8197. Change the range in Play: at ±2 g it becomes 16393, at ±8 g it is 4098. For the gyro at ±2000 °/s, one count is 0.07 °/s." }
+  ];
+  var stepIdx = Math.min(STEPS.length - 1, Math.max(0, store("step") || 0));
+  var answered = {};
+  function renderStep() {
+    var s = STEPS[stepIdx], prog = $("progress"); prog.innerHTML = "";
+    for (var i = 0; i < STEPS.length; i++) { var b = document.createElement("b"); b.className = i < stepIdx ? "done" : (i === stepIdx ? "now" : ""); prog.appendChild(b); }
+    var el = $("step"), a = answered[stepIdx];
+    el.innerHTML = '<div class="count">Step ' + (stepIdx + 1) + ' of ' + STEPS.length + '</div><h3></h3><p class="say"></p><p class="ask"></p><div class="choices"></div><div class="explain" hidden></div><div class="stepnav" style="margin-top:12px"></div>';
+    el.querySelector("h3").textContent = s.title;
+    el.querySelector(".say").textContent = s.say;
+    el.querySelector(".ask").textContent = "Guess first: " + s.ask;
+    var ch = el.querySelector(".choices");
+    s.options.forEach(function (o, i) {
+      var b = document.createElement("button"); b.textContent = o;
+      if (a !== undefined) { b.disabled = true; if (i === s.correct) b.className = "right"; else if (i === a) b.className = "wrong"; }
+      b.addEventListener("click", function () { answered[stepIdx] = i; if (mode !== s.mode) setMode(s.mode); run(s.show()); renderStep(); });
+      ch.appendChild(b);
+    });
+    var ex = el.querySelector(".explain");
+    if (a !== undefined) { ex.hidden = false; ex.innerHTML = (a === s.correct ? '<b class="ok">Right. </b>' : '<b class="no">Not quite. </b>') + ""; ex.appendChild(document.createTextNode(s.explain)); }
+    var nav = el.querySelector(".stepnav");
+    function navBtn(text, fn, primary) { var b = document.createElement("button"); b.textContent = text; if (primary) b.className = "primary"; b.addEventListener("click", fn); nav.appendChild(b); }
+    if (stepIdx > 0) navBtn("Back", function () { go(stepIdx - 1); });
+    if (a !== undefined) navBtn("Show me again", function () { if (mode !== s.mode) setMode(s.mode); run(s.show()); });
+    else navBtn("Just show me", function () { if (mode !== s.mode) setMode(s.mode); run(s.show()); });
+    if (stepIdx < STEPS.length - 1) navBtn("Next step", function () { go(stepIdx + 1); }, a !== undefined);
+    else if (a !== undefined) navBtn("Done: try the Missions", function () { selectTab("missions"); }, true);
+  }
+  function go(i) { stepIdx = i; store("step", i); var s = STEPS[i]; if (mode !== s.mode) setMode(s.mode); renderStep(); }
+
+  /* ---------------- missions ---------------- */
+  var MISSIONS = [
+    { text: "Make X read +1 g, held still.", hint: "Stand it on an edge.", test: function (r) { return r.still && r.a[0] > 0.97; }, hold: 0.5 },
+    { text: "Flip it: make Z read the opposite of Home (±1 g), held still.", hint: "Turn the chip over.", test: function (r) { return r.still && r.a[2] * HOMES[homeKey].z < -0.97; }, hold: 0.5 },
+    { text: "Make Y read −1 g, held still.", hint: "The tip sliders, or drag.", test: function (r) { return r.still && r.a[1] < -0.97; }, hold: 0.5 },
+    { text: "Make X read +0.50 g (±0.03), held still.", hint: "Tip left/right slider to 30°.", test: function (r) { return r.still && Math.abs(r.a[0] - 0.5) < 0.03; }, hold: 0.6 },
+    { text: "Make gyro Z go above +60 °/s.", hint: "Spin around Z, or drag sideways fast.", test: function (r) { return r.g[2] > 60; }, hold: 0 },
+    { text: "Make gyro X go below −45 °/s.", hint: "Spin \"X backwards\".", test: function (r) { return r.g[0] < -45; }, hold: 0 },
+    { text: "Turn it while the accelerometer stays the same.", hint: "Which arrow points up? Spin around that one.", test: function (r) { return r.still && r.gmag > 40 && r.adrift < 0.02; }, hold: 0.4 },
+    { text: "Make the accelerometer read 0 g.", hint: "Let it fall.", test: function (r) { return r.amag < 0.1; }, hold: 0 },
+    { text: "Clip the accelerometer (a reading bigger than the range).", hint: "Set the range to ±2 g, then Drop and catch.", test: function (r) { return r.aclip; }, hold: 0 },
+    { text: "Pendant: hold a lean to the plate (15° to 45°, forward).", hint: "Play → Pendant on a person → Lean to plate.", test: function (r) { return mode !== "board" && r.still && r.leanDeg > 15 && r.leanDeg < 45 && r.a[2] < 0; }, hold: 0.6 },
+    { text: "Pendant: run.", hint: "Play → Pendant on a person → Run.", test: function (r) { return mode !== "board" && r.amag > 2.3; }, hold: 0 }
+  ];
+  var done = store("missions") || {};
+  var holdT = {};
+  function renderMissions() {
+    var ol = $("missions"); ol.innerHTML = "";
+    MISSIONS.forEach(function (m, i) {
+      var li = document.createElement("li"); li.id = "mi" + i; if (done[i]) li.className = "done";
+      li.innerHTML = '<span class="tick" aria-hidden="true">✓</span><div><p></p><small></small></div>';
+      li.querySelector("p").textContent = m.text; li.querySelector("small").textContent = "Hint: " + m.hint;
+      ol.appendChild(li);
+    });
+    var n = Object.keys(done).length; $("score").textContent = n + " of " + MISSIONS.length + " done.";
+  }
+  function checkMissions(r, dt) {
+    MISSIONS.forEach(function (m, i) {
+      if (done[i]) return;
+      if (m.test(r)) { holdT[i] = (holdT[i] || 0) + dt; if (holdT[i] >= m.hold) { done[i] = true; store("missions", done); renderMissions(); var li = $("mi" + i); if (li) li.classList.add("flash"); setCaption("Mission done: " + m.text); } }
+      else holdT[i] = 0;
+    });
+  }
+
+  /* ---------------- my data ---------------- */
+  var SAMPLE = [
+    "I (82549) imu_s3: ax=  7094 ay=   612 az= -3928 | gx=     0 gy=    -1 gz=     6",
+    "I (82566) imu_s3: ax=  7083 ay=   595 az= -3920 | gx=     5 gy=     4 gz=     4",
+    "I (82583) imu_s3: ax=  7069 ay=   566 az= -3930 | gx=    11 gy=     9 gz=     2",
+    "I (82601) imu_s3: ax=  7050 ay=   560 az= -3915 | gx=    11 gy=    10 gz=     5",
+    "I (82618) imu_s3: ax=  7029 ay=   564 az= -3919 | gx=     6 gy=    12 gz=     5",
+    "I (82636) imu_s3: ax=  7041 ay=   564 az= -3968 | gx=    -5 gy=     9 gz=     6",
+    "I (82653) imu_s3: ax=  7036 ay=   578 az= -3953 | gx=   -11 gy=     3 gz=     6",
+    "I (82670) imu_s3: ax=  7061 ay=   589 az= -3965 | gx=   -13 gy=     5 gz=     7",
+    "I (82688) imu_s3: ax=  7092 ay=   607 az= -3927 | gx=   -12 gy=    -1 gz=     7",
+    "I (82705) imu_s3: ax=  7076 ay=   619 az= -3928 | gx=    -1 gy=     3 gz=     8",
+    "I (82722) imu_s3: ax=  7091 ay=   607 az= -3954 | gx=     3 gy=     9 gz=     7",
+    "I (82740) imu_s3: ax=  7085 ay=   602 az= -3947 | gx=     5 gy=    10 gz=     4",
+    "I (82757) imu_s3: ax=  7079 ay=   586 az= -3950 | gx=     2 gy=     8 gz=     3",
+    "I (82774) imu_s3: ax=  7065 ay=   594 az= -3936 | gx=    -8 gy=     3 gz=     2",
+    "I (82792) imu_s3: ax=  7049 ay=   602 az= -3944 | gx=    -8 gy=     1 gz=     2",
+    "I (82809) imu_s3: ax=  7053 ay=   594 az= -3954 | gx=    -5 gy=    -1 gz=     1",
+    "I (82827) imu_s3: ax=  7055 ay=   591 az= -3949 | gx=    -1 gy=     0 gz=     1",
+    "I (82844) imu_s3: ax=  7058 ay=   589 az= -3954 | gx=     4 gy=     3 gz=     3",
+    "I (82861) imu_s3: ax=  7054 ay=   575 az= -3957 | gx=     6 gy=     5 gz=     5",
+    "I (82879) imu_s3: ax=  7052 ay=   581 az= -3967 | gx=     4 gy=     6 gz=     6",
+    "I (82896) imu_s3: ax=  7049 ay=   593 az= -3955 | gx=     1 gy=     8 gz=     6",
+    "I (82913) imu_s3: ax=  7048 ay=   609 az= -3970 | gx=     8 gy=    13 gz=     5",
+    "I (82931) imu_s3: ax=  7034 ay=   596 az= -3973 | gx=    17 gy=    19 gz=     6",
+    "I (82948) imu_s3: ax=  7007 ay=   579 az= -3940 | gx=    24 gy=    26 gz=     8",
+    "I (82966) imu_s3: ax=  7028 ay=   569 az= -3950 | gx=    22 gy=    31 gz=     9",
+    "I (82983) imu_s3: ax=  7058 ay=   558 az= -3963 | gx=     7 gy=    30 gz=     8",
+    "I (83000) imu_s3: ax=  7078 ay=   573 az= -3952 | gx=    -6 gy=    22 gz=     7",
+    "I (83018) imu_s3: ax=  7089 ay=   579 az= -3941 | gx=    -7 gy=    15 gz=     5",
+    "I (83035) imu_s3: ax=  7092 ay=   571 az= -3940 | gx=    -4 gy=    12 gz=     4",
+    "I (83052) imu_s3: ax=  7078 ay=   558 az= -3934 | gx=    -2 gy=    12 gz=     3"
+  ].join("\n");
+  $("data").value = SAMPLE;
+  var play = null;
+  function parseData(text) {
+    var out = [], re = /ax=\s*(-?\d+)\s+ay=\s*(-?\d+)\s+az=\s*(-?\d+)(?:[^\n]*?gx=\s*(-?\d+)\s+gy=\s*(-?\d+)\s+gz=\s*(-?\d+))?/;
+    text.split(/\r?\n/).forEach(function (line) {
+      var m = re.exec(line); if (!m) return;
+      var ts = /\((\d+)\)/.exec(line);
+      out.push({ t: ts ? +ts[1] : null, raw: [+m[1], +m[2], +m[3], m[4] !== undefined ? +m[4] : 0, m[5] !== undefined ? +m[5] : 0, m[6] !== undefined ? +m[6] : 0] });
+    });
+    return out;
+  }
+  function startData() {
+    var rows = parseData($("data").value);
+    if (!rows.length) { $("d-status").textContent = "No lines with ax= ay= az= found."; return; }
+    motion = null; lin.set(0, 0, 0); bob.set(0, 0, 0);
+    if (mode !== "board") setMode("board");
+    play = { rows: rows, i: 0, t: 0 };
+    if (paused) togglePause();
+  }
+  function stopData() {
+    play = null; dataSample = null; $("d-status").textContent = "";
+    if (dsPlay || dsCur >= 0) {
+      dsPlay = null; dsCur = -1; dsWords = ""; dsLean = null; dsShownRun = null; $("badge").hidden = true; targetRing.visible = false;
+      if (mode === "seated") { q.identity(); rigPos.copy(SEAT_HIP); camLiftTarget = 0; bob.set(0, 0, 0); poseLimbs(0, 0, 0, 0, 0); qMount.copy(dsMountQuat()); syncBoardPrev(); setCaption("Sitting at the table. Press ▶ Random bend, or pick one from the list of bends."); }
+      updateDsNow(); drawStripHead(); if (ds) { drawFan(); drawPlate(); }
+    }
+  }
+  function stepData(dt) {
+    if (!play) return;
+    var rows = play.rows; play.t += dt * 1000;
+    var cur = rows[play.i], next = rows[play.i + 1];
+    var gap = next ? ((next.t !== null && cur.t !== null && next.t > cur.t) ? next.t - cur.t : 17.3) : 17.3;
+    while (play.t >= gap) {
+      play.t -= gap; play.i++;
+      if (play.i >= rows.length) { if ($("d-loop").checked) play.i = 0; else { play.i = rows.length - 1; var last = play.rows[play.i]; applyRow(last); play = null; $("d-status").textContent = "Finished."; return; } }
+      cur = rows[play.i]; next = rows[play.i + 1];
+      gap = next ? ((next.t !== null && cur.t !== null && next.t > cur.t) ? next.t - cur.t : 17.3) : 17.3;
+    }
+    applyRow(rows[play.i]);
+    $("d-status").textContent = "Line " + (play.i + 1) + " of " + rows.length;
+  }
+  function applyRow(row) {
+    var as = ACC_SENS[accRange] / 1000, gs = GYR_SENS[gyrRange] / 1000;
+    var a = [row.raw[0] * as, row.raw[1] * as, row.raw[2] * as], g = [row.raw[3] * gs, row.raw[4] * gs, row.raw[5] * gs];
+    dataSample = { a: a, g: g };
+    var len = Math.hypot(a[0], a[1], a[2]);
+    if (len > 0.05) { q.copy(poseFromUp([a[0] / len, a[1] / len, a[2] / len])); }
+    setCaption("Your log, line " + (play ? play.i + 1 : "") + ": ax " + row.raw[0] + ", ay " + row.raw[1] + ", az " + row.raw[2] + " counts.");
+  }
+
+  /* ---------------- readouts ---------------- */
+  var E = {}; ["ab", "av", "ar", "gb", "gv", "gr", "arow", "grow"].forEach(function (k) { E[k] = [0, 1, 2].map(function (i) { return $(k + i); }); });
+  function bar(el, v, range) { var k = Math.max(-1, Math.min(1, v / range)); if (k >= 0) { el.style.left = "50%"; el.style.width = (k * 50) + "%"; } else { el.style.left = (50 + k * 50) + "%"; el.style.width = (-k * 50) + "%"; } }
+  function sgn(v, d) { var s = Math.abs(v).toFixed(d); return (v < 0 && parseFloat(s) !== 0 ? "−" : "+") + s; }
+  function pill(el, cls, t) { el.className = "pill " + cls; el.textContent = t; }
+  var AX = "XYZ";
+  var accPast = [];
+  function readings() {
+    var a, g;
+    if (dataSample) { a = dataSample.a.slice(); g = dataSample.g.slice(); }
+    else { a = accTrue.slice(); g = gyroShown.slice(); }
+    var clipA = false, clipG = false;
+    var shownA = a.map(function (v) { if (Math.abs(v) > accRange) { clipA = true; return Math.sign(v) * accRange; } return v; });
+    var shownG = g.map(function (v) { if (Math.abs(v) > gyrRange) { clipG = true; return Math.sign(v) * gyrRange; } return v; });
+    var amag = Math.hypot(shownA[0], shownA[1], shownA[2]);
+    var gmag = Math.hypot(shownG[0], shownG[1], shownG[2]);
+    var old = accPast.length ? accPast[0].a : shownA;
+    var adrift = Math.hypot(shownA[0] - old[0], shownA[1] - old[1], shownA[2] - old[2]);
+    var leanDeg = Math.acos(Math.max(-1, Math.min(1, shownA[0] / (amag || 1)))) * 180 / Math.PI;
+    return { a: shownA, g: shownG, amag: amag, gmag: gmag, still: Math.abs(amag - 1) < (dataSample ? 0.06 : 0.03), aclip: clipA, gclip: clipG, adrift: adrift, leanDeg: leanDeg };
+  }
+  function wordsFor(r) {
+    var s1, s2;
+    if (r.amag < 0.15) s1 = "<b>Falling.</b> Nothing pushes the chip, so the accelerometer reads 0 g.";
+    else if (!r.still) s1 = "<b>Being pushed or shaken.</b> The total is " + r.amag.toFixed(2) + " g, not 1 g.";
+    else {
+      var order = [0, 1, 2].sort(function (i, j) { return Math.abs(r.a[j]) - Math.abs(r.a[i]); });
+      var big = order[0], v = r.a[big];
+      if (Math.abs(v) > 0.97) s1 = "<b>Still.</b> The " + AX[big] + " arrow points " + (v > 0 ? "up" : "down") + ", so " + AX[big] + " reads " + sgn(v, 2) + " g.";
+      else {
+        var b2 = order[1], tilt = Math.acos(Math.min(1, Math.abs(v))) * 180 / Math.PI;
+        s1 = "<b>Still, tilted.</b> The 1 g is shared: " + AX[big] + " " + sgn(v, 2) + " and " + AX[b2] + " " + sgn(r.a[b2], 2) + ". The " + AX[big] + " arrow is " + Math.round(tilt) + "° away from pointing straight " + (v > 0 ? "up" : "down") + ".";
+      }
+    }
+    if (r.gmag < 2) s2 = "<b>Not turning:</b> gyro 0.";
+    else {
+      var gi = 0; for (var j = 1; j < 3; j++) if (Math.abs(r.g[j]) > Math.abs(r.g[gi])) gi = j;
+      s2 = "<b>Turning</b> around the " + AX[gi] + " arrow at " + Math.round(Math.abs(r.g[gi])) + " °/s (" + (r.g[gi] > 0 ? "plus" : "minus") + " direction).";
+    }
+    return s1 + " " + s2;
+  }
+  var lastWords = "";
+  function updateReadouts(r) {
+    var as = ACC_SENS[accRange] / 1000, gs = GYR_SENS[gyrRange] / 1000;
+    for (var i = 0; i < 3; i++) {
+      bar(E.ab[i], r.a[i], 2); E.av[i].textContent = sgn(r.a[i], 2) + " g";
+      E.ar[i].textContent = String(Math.max(-32768, Math.min(32767, Math.round(r.a[i] / as))));
+      E.arow[i].classList.toggle("clip", Math.abs(r.a[i]) >= accRange - 1e-6);
+      bar(E.gb[i], r.g[i], 180); E.gv[i].textContent = sgn(Math.round(r.g[i]), 0) + " °/s";
+      E.gr[i].textContent = String(Math.max(-32768, Math.min(32767, Math.round(r.g[i] / gs))));
+      E.grow[i].classList.toggle("clip", Math.abs(r.g[i]) >= gyrRange - 1e-6);
+    }
+    $("amag").textContent = r.amag.toFixed(2) + " g";
+    if (r.aclip) pill($("astate"), "alert", "clipped at ±" + accRange + " g");
+    else if (r.amag < 0.15) pill($("astate"), "alert", "≈ 0 g · falling");
+    else if (r.still) pill($("astate"), "ok", "1 g · still");
+    else pill($("astate"), "warn", "not 1 g · being pushed");
+    if (r.gclip) pill($("gstate"), "alert", "clipped at ±" + gyrRange + " °/s");
+    else if (r.gmag < 2) pill($("gstate"), "ok", "0 · not turning");
+    else pill($("gstate"), "warn", "turning at " + Math.round(r.gmag) + " °/s");
+    var w = (dsWords && dataSample ? dsWords + " " : "") + wordsFor(r); if (w !== lastWords) { $("words").innerHTML = w; lastWords = w; }
+  }
+  function updateFoot() {
+    var cpg = Math.round(1000 / ACC_SENS[accRange]);
+    $("foot").textContent = "Raw counts at your current range: accelerometer ±" + accRange + " g, so 1 g = " + cpg + " counts. Gyroscope ±" + gyrRange + " °/s, so 1 count = " + (GYR_SENS[gyrRange] / 1000) + " °/s. Your imu_s3 uses ±4 g and ±2000 °/s.";
+  }
+
+  /* ---------------- charts ---------------- */
+  var charts = [{ el: $("chart-a"), key: "a", range: 2, unit: "g" }, { el: $("chart-g"), key: "g", range: 180, unit: "°/s" }];
+  function drawCharts() {
+    var cols = [tok("--x"), tok("--y"), tok("--z")], mut = tok("--muted"), line = tok("--line");
+    charts.forEach(function (c) {
+      var dpr = Math.min(window.devicePixelRatio || 1, 2), w = c.el.clientWidth, h = c.el.clientHeight; if (!w || !h) return;
+      if (c.el.width !== Math.round(w * dpr)) { c.el.width = Math.round(w * dpr); c.el.height = Math.round(h * dpr); }
+      var g = c.el.getContext("2d"); g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, w, h);
+      var pad = 4, y0 = h / 2, sy = (h / 2 - pad) / c.range;
+      g.strokeStyle = line; g.lineWidth = 1; g.beginPath(); g.moveTo(0, y0); g.lineTo(w, y0);
+      [-1, 1].forEach(function (s) { var yy = y0 - s * (c.range / 2) * sy; g.moveTo(0, yy); g.lineTo(w, yy); }); g.stroke();
+      g.fillStyle = mut; g.font = "10px 'IBM Plex Mono', monospace";
+      g.fillText("+" + c.range / 2 + " " + c.unit, 4, y0 - (c.range / 2) * sy - 2); g.fillText("−" + c.range / 2, 4, y0 + (c.range / 2) * sy + 11);
+      g.fillText("last 10 s", w - 58, h - 4);
+      if (history.length < 2) return;
+      var tEnd = history[history.length - 1].t, span = 10;
+      for (var k = 0; k < 3; k++) {
+        g.strokeStyle = cols[k]; g.lineWidth = 1.6; g.beginPath();
+        var started = false;
+        for (var i = 0; i < history.length; i++) {
+          var p = history[i], x = w - (tEnd - p.t) / span * w; if (x < 0) continue;
+          var v = Math.max(-c.range, Math.min(c.range, p[c.key][k])), y = y0 - v * sy;
+          if (!started) { g.moveTo(x, y); started = true; } else g.lineTo(x, y);
+        }
+        g.stroke();
+      }
+    });
+  }
+
+
+  /* ---------------- dataset: seated people, labelled for MEMS Studio ----------------
+   * The engine (IMUDS, above) builds every person's session and the sensor data.
+   * This part is the settings form, playback in the 3D view, charts and downloads. */
+  var DSC = IMUDS.CLASSES;
+  var DS_TOK = ["--c-still", "--c-bend", "--c-walking", "--c-jogging", "--c-running", "--c-other"];
+  var DS_NAME = ["STILL", "BEND", "WALKING", "JOGGING", "RUNNING", "OTHER"];
+  var K_M = 2.5;                                        // scene units per metre
+  var SEAT_HIP = new T.Vector3(-0.55, -0.95, 0);
+  var SEAT_TARGET = new T.Vector3(0.4, -0.62, 0);
+  var camAz = 0.5, camEl = 0.2, camLift = 0, camLiftTarget = 0;
+  function placeSeatedCamera() {
+    var d = 6.0 * (camera.aspect < 1.15 ? 1.18 : 1) * (1 + 0.12 * camLift), ce = Math.cos(camEl), tx = SEAT_TARGET.x, ty = SEAT_TARGET.y + 0.8 * camLift, tz = SEAT_TARGET.z + 0.5 * camLift;
+    camera.position.set(tx + d * Math.sin(camAz) * ce, ty + d * Math.sin(camEl), tz + d * Math.cos(camAz) * ce); camera.lookAt(tx, ty, tz);
+  }
+  var Q_LC = new T.Quaternion().setFromRotationMatrix(new T.Matrix4().makeBasis(new T.Vector3(1, 0, 0), new T.Vector3(0, 0, 1), new T.Vector3(0, -1, 0)));
+  function eq(a) { return new T.Quaternion(a[1], a[2], a[3], a[0]); }
+  function dsMountQuat() { var m = IMUDS.MOUNTS[dsCfg.mount] || IMUDS.MOUNTS.xup_zout; return eq(IMUDS.qFromBasis(m.X, m.Y, m.Z)).multiply(Q_LC); }
+
+  var dsCfg = (function () {
+    var d = IMUDS.defaults(), s = store("dscfg");
+    if (s && typeof s === "object") Object.keys(d).forEach(function (k) { if (typeof s[k] === typeof d[k]) d[k] = s[k]; });
+    if (!IMUDS.MOUNTS[d.mount]) d.mount = "xup_zout";
+    return d;
+  })();
+  var ds = null, dsFiles = null, dsBusy = false, dsPlay = null, dsSpeed = 1, dsWords = "", dsCur = -1, dsLean = null;
+  var dsStripPer = 1, dsRunStarts = [], dsBase = {}, dsShownRun = null, dsClip = "";
+
+  var DS_GROUPS = [
+    { title: "Bends to the plate", fields: [
+      { k: ["bends"], label: "How many bends", min: 10, max: 600, step: 10, help: "Spread over all the people." },
+      { k: ["bendMin", "bendMax"], label: "Lean angle", unit: "°", min: 5, max: 50, step: 1, help: "Each bend picks a random angle in this bracket, measured from that person's own upright." },
+      { k: ["plateSpread"], label: "Plate direction", pre: "±", unit: "°", min: 0, max: 45, step: 1, help: "Random spot left or right of straight ahead, like food in different places." },
+      { k: ["downMin", "downMax"], label: "Going down", unit: "s", min: 0.3, max: 3, step: 0.1 },
+      { k: ["holdMin", "holdMax"], label: "Holding (picking the food)", unit: "s", min: 0.1, max: 4, step: 0.1 },
+      { k: ["upMin", "upMax"], label: "Coming back up", unit: "s", min: 0.3, max: 3, step: 0.1, help: "Never faster than 50°/s, so every bend stays gentle." },
+      { k: ["pauseMin", "pauseMax"], label: "Sitting between bends", unit: "s", min: 1, max: 20, step: 0.5 }
+    ] },
+    { title: "People", fields: [
+      { k: ["people"], label: "People", min: 1, max: 60, step: 1, help: "Each has their own posture, speed, sensor offsets and pendant angle." },
+      { k: ["seed"], label: "Random seed", min: 1, max: 999999, step: 1, help: "The same seed and settings always build the same data." }
+    ] },
+    { title: "Everything that is not a bend", fields: [
+      { k: ["stillExtra"], label: "Extra still moments", min: 0, max: 300, step: 1, help: "Upright, slouching, phone, leaning back, drinking, talking." },
+      { k: ["stillMin", "stillMax"], label: "Each one lasting", unit: "s", min: 2, max: 60, step: 1 },
+      { k: ["stillLeanMax"], label: "Most a still person leans forward", unit: "°", min: 3, max: 30, step: 1, help: "Keep it below the bend bracket, or still and bend look the same." },
+      { k: ["walkMin"], label: "Walking", unit: "min", min: 0, max: 30, step: 0.5 },
+      { k: ["jogMin"], label: "Jogging", unit: "min", min: 0, max: 30, step: 0.5 },
+      { k: ["runMin"], label: "Running", unit: "min", min: 0, max: 30, step: 0.5 },
+      { k: ["floorBends"], label: "Bends to the floor (55–85°)", min: 0, max: 200, step: 1 },
+      { k: ["sideReaches"], label: "Reaches to the side", min: 0, max: 200, step: 1 },
+      { k: ["stretches"], label: "Lean-back stretches", min: 0, max: 200, step: 1 },
+      { k: ["turns"], label: "Turns in the chair", min: 0, max: 200, step: 1 }
+    ] },
+    { title: "Pendant and files", fields: [
+      { sel: "mount", label: "How the pendant sits", options: Object.keys(IMUDS.MOUNTS).map(function (k) { return [k, IMUDS.MOUNTS[k].label]; }) },
+      { k: ["coupling"], label: "Pendant follows the chest", unit: "%", scale: 100, min: 50, max: 100, step: 5, help: "100% = clipped to the shirt. Lower = hangs on a loose chain and tilts less than you do." },
+      { sel: "odr", num: true, label: "Data rate (use the same as the MLC)", options: [[15, "15 Hz"], [30, "30 Hz (recommended)"], [60, "60 Hz"], [120, "120 Hz"], [240, "240 Hz"]] },
+      { k: ["minFileSec"], label: "Window length", unit: "s", min: 0.5, max: 4, step: 0.1, help: "How much data the MLC looks at for one decision. Shorter files are left out." },
+      { sel: "header", label: "Column names", options: [["st", "A_X [mg] … G_Z [dps]"], ["ms", "acc_x[mg] … gyro_z[dps]"]] },
+      { chk: "gyro", label: "Include the gyroscope" }
+    ] }
+  ];
+  var SIZE_PRESETS = {
+    quick: { people: 6, bends: 30, stillExtra: 8, walkMin: 1, jogMin: 1, runMin: 1, floorBends: 4, sideReaches: 4, stretches: 3, turns: 3 },
+    standard: { people: 20, bends: 100, stillExtra: 24, walkMin: 3, jogMin: 2, runMin: 2, floorBends: 12, sideReaches: 12, stretches: 8, turns: 8 },
+    big: { people: 40, bends: 400, stillExtra: 100, walkMin: 10, jogMin: 6, runMin: 6, floorBends: 40, sideReaches: 40, stretches: 24, turns: 24 }
+  };
+  var ANGLE_PRESETS = { gentle: { bendMin: 10, bendMax: 25 }, normal: { bendMin: 12, bendMax: 35 }, deep: { bendMin: 20, bendMax: 45 } };
+
+  function fid(k) { return "f-" + k; }
+  function buildDsFields() {
+    var host = $("ds-fields"); host.innerHTML = "";
+    DS_GROUPS.forEach(function (gr) {
+      var fs = document.createElement("fieldset"); fs.className = "fg";
+      var lg = document.createElement("legend"); lg.textContent = gr.title; fs.appendChild(lg);
+      var list = document.createElement("div"); list.className = "fields"; fs.appendChild(list);
+      gr.fields.forEach(function (f) {
+        var row = document.createElement("div"); row.className = "field";
+        var left = document.createElement("div"), lab = document.createElement("label");
+        lab.textContent = f.label; lab.htmlFor = fid(f.sel || f.chk || f.k[0]); left.appendChild(lab);
+        if (f.help) { var sm = document.createElement("small"); sm.textContent = f.help; left.appendChild(sm); }
+        var right = document.createElement("div"); right.className = "in";
+        if (f.sel) {
+          var se = document.createElement("select"); se.id = fid(f.sel);
+          f.options.forEach(function (o) { var op = document.createElement("option"); op.value = String(o[0]); op.textContent = o[1]; se.appendChild(op); });
+          se.addEventListener("change", function () { dsCfg[f.sel] = f.num ? +se.value : se.value; dsChanged(); });
+          right.appendChild(se);
+        } else if (f.chk) {
+          var cb = document.createElement("input"); cb.type = "checkbox"; cb.id = fid(f.chk);
+          cb.addEventListener("change", function () { dsCfg[f.chk] = cb.checked; dsChanged(); });
+          right.appendChild(cb);
+        } else {
+          if (f.pre) right.appendChild(document.createTextNode(f.pre));
+          f.k.forEach(function (k, i) {
+            if (i) right.appendChild(document.createTextNode("to"));
+            var inp = document.createElement("input"); inp.type = "number"; inp.id = fid(k);
+            inp.min = f.min; inp.max = f.max; inp.step = f.step; inp.inputMode = "decimal";
+            if (f.k.length > 1) inp.setAttribute("aria-label", f.label + (i ? ", most" : ", least"));
+            inp.addEventListener("change", function () { readField(f); });
+            right.appendChild(inp);
+          });
+          if (f.unit) right.appendChild(document.createTextNode(f.unit));
+        }
+        row.appendChild(left); row.appendChild(right); list.appendChild(row);
+      });
+      host.appendChild(fs);
+    });
+    writeDsFields();
+  }
+  function writeDsFields() {
+    DS_GROUPS.forEach(function (gr) { gr.fields.forEach(function (f) {
+      if (f.sel) $(fid(f.sel)).value = String(dsCfg[f.sel]);
+      else if (f.chk) $(fid(f.chk)).checked = !!dsCfg[f.chk];
+      else f.k.forEach(function (k) { $(fid(k)).value = String(+(dsCfg[k] * (f.scale || 1)).toFixed(2)); });
+    }); });
+    renderDsWarnings(); updateGenLabel();
+  }
+  function readField(f) {
+    var sc = f.scale || 1;
+    var v = f.k.map(function (k) { var x = parseFloat($(fid(k)).value); if (!isFinite(x)) x = dsCfg[k] * sc; return Math.max(f.min, Math.min(f.max, x)) / sc; });
+    if (v.length === 2 && v[0] > v[1]) v.reverse();
+    f.k.forEach(function (k, i) { dsCfg[k] = (f.step >= 1 && !f.scale) ? Math.round(v[i]) : +v[i].toFixed(3); });
+    writeDsFields(); dsChanged();
+  }
+  function dsChanged() {
+    store("dscfg", dsCfg); renderDsWarnings(); updateGenLabel();
+    if (mode === "seated" && !dsPlay && !dataSample) qMount.copy(dsMountQuat());
+    if (ds) $("ds-status").textContent = "Settings changed. Press Generate to rebuild the dataset with them.";
+    if (ds) drawFan();
+  }
+  function updateGenLabel() { $("ds-gen").textContent = "Generate " + dsCfg.bends + " random bends + everything else"; }
+  function dsWarnings(c) {
+    var w = [], W = Math.round(c.minFileSec * c.odr);
+    if (c.stillLeanMax >= c.bendMin) w.push("Still postures lean up to " + c.stillLeanMax + "°, which reaches the bend bracket (from " + c.bendMin + "°). The model will mix still and bend up.");
+    if (c.bendMax >= 55) w.push("Leans of 55° or more look like bends to the floor, which are labelled other.");
+    if (c.bendMin < 8) w.push("Under about 8° a bend is hard to tell from normal sitting sway.");
+    if (W > 255) w.push("The window is " + W + " samples, but the MLC takes at most 255. Shorten the window or lower the data rate.");
+    if (W < 10) w.push("The window is only " + W + " samples, so the features get noisy.");
+    if (!c.walkMin && !c.jogMin && !c.runMin) w.push("No walking, jogging or running: the model never sees them and may call them bends.");
+    if (c.people < 5) w.push("With fewer than 5 people the model can learn one person's habits instead of the bend.");
+    if (c.bends < 50) w.push("Fewer than 50 bends is thin for training; 100 or more is better.");
+    if (c.coupling < 0.8) w.push("A loose pendant tilts less than the chest, so bends look smaller to the sensor.");
+    return w;
+  }
+  function renderDsWarnings() {
+    var ul = $("ds-warn"), w = dsWarnings(dsCfg); ul.innerHTML = "";
+    w.forEach(function (t) { var li = document.createElement("li"); li.textContent = t; ul.appendChild(li); });
+    ul.hidden = !w.length;
+  }
+
+  /* ---- generate (one person per tick, so the page keeps painting) ---- */
+  function setProg(k) { $("ds-prog").firstElementChild.style.width = Math.round(k * 100) + "%"; }
+  function dsBusyUi(on) { ["ds-gen", "ds-gen2", "ds-new"].forEach(function (id) { $(id).disabled = on; }); $("ds-prog").hidden = !on; }
+  function dsGenerate() {
+    if (dsBusy) return;
+    stopData(); dsBusy = true; dsBusyUi(true); setProg(0);
+    var cfg = JSON.parse(JSON.stringify(dsCfg)), t0 = performance.now(), ctx;
+    $("ds-status").textContent = "Building " + cfg.people + " people with " + cfg.bends + " bends…";
+    function fail(e) { dsBusy = false; dsBusyUi(false); $("ds-status").textContent = "Could not build the dataset: " + (e && e.message ? e.message : e); }
+    try { ctx = IMUDS.start(cfg); } catch (e) { fail(e); return; }
+    function tick() {
+      var until = performance.now() + 30, done = false;
+      try { while (!done && performance.now() < until) done = IMUDS.stepPerson(ctx); } catch (e) { fail(e); return; }
+      setProg(ctx.pi / ctx.people.length);
+      if (!done) { setTimeout(tick, 0); return; }
+      try { ds = IMUDS.finish(ctx); } catch (e) { fail(e); return; }
+      dsFiles = null; dsBusy = false; dsBusyUi(false);
+      $("ds-status").textContent = "Built " + (ds.lab.length / ds.odr / 60).toFixed(1) + " minutes of data from " + cfg.people + " people, " + ds.bends.length + " bends, seed " + cfg.seed + ", in " + ((performance.now() - t0) / 1000).toFixed(1) + " s.";
+      renderDs();
+    }
+    setTimeout(tick, 30);
+  }
+
+  /* ---- results ---- */
+  function fmtDur(s) { var m = Math.floor(s / 60), r = Math.round(s - m * 60); if (r === 60) { m++; r = 0; } return m + ":" + (r < 10 ? "0" : "") + r; }
+  function dirText(d) { var a = Math.round(Math.abs(d)); return a < 1 ? "straight ahead" : a + "° " + (d > 0 ? "right" : "left"); }
+  function renderDs() {
+    $("ds-results").hidden = false;
+    dsRunStarts = ds.runs.map(function (r) { return r.i0; });
+    dsBase = {}; ds.people.forEach(function (p) { dsBase[p.id] = p.base_lean_deg; });
+    renderDsSummary(); renderBendList(); renderPersonSel(); renderExamples(); renderSteps();
+    var an = ds.bends.map(function (b) { return b.angle; }), di = ds.bends.map(function (b) { return b.dir; });
+    var mean = an.reduce(function (a, b) { return a + b; }, 0) / (an.length || 1);
+    $("ds-astats").textContent = an.length ? ds.bends.length + " bends · lean " + Math.min.apply(null, an).toFixed(1) + "° to " + Math.max.apply(null, an).toFixed(1) + "° (average " + mean.toFixed(1) + "°) · toward the plate from " + dirText(Math.min.apply(null, di)) + " to " + dirText(Math.max.apply(null, di)) + ". Every bend is random inside your bracket." : "";
+    drawDsCharts(); drawStrip();
+    setTimeout(function () { try { dsFiles = IMUDS.toFiles(ds); showFilePreview(); } catch (e) { $("ds-file").textContent = "Could not build the files: " + e.message; } }, 60);
+  }
+  function dsWindow() { return Math.round(ds.cfg.minFileSec * ds.odr); }
+  function renderDsSummary() {
+    var W = dsWindow(), rows = DSC.map(function () { return { files: 0, win: 0, sec: 0 }; }), tot = { files: 0, win: 0, sec: 0 };
+    ds.runs.forEach(function (rn) { var L = rn.i1 - rn.i0, r = rows[rn.lab]; r.sec += L / ds.odr; if (L >= W) { r.files++; r.win += Math.floor(L / W); } });
+    rows.forEach(function (r) { tot.files += r.files; tot.win += r.win; tot.sec += r.sec; });
+    var h = "<thead><tr><th>Label</th><th>Files</th><th>Windows</th><th>Time</th><th>Share</th></tr></thead><tbody>";
+    rows.forEach(function (r, i) { h += '<tr><td><span class="sw" style="background:var(' + DS_TOK[i] + ')"></span>' + DSC[i] + "</td><td>" + r.files + "</td><td>" + r.win + "</td><td>" + fmtDur(r.sec) + "</td><td>" + Math.round(100 * r.sec / (tot.sec || 1)) + "%</td></tr>"; });
+    h += "</tbody><tfoot><tr><td>total</td><td>" + tot.files + "</td><td>" + tot.win + "</td><td>" + fmtDur(tot.sec) + "</td><td></td></tr></tfoot>";
+    $("ds-sum").innerHTML = h;
+    $("ds-sumnote").textContent = "One file per moment, one label per file, at " + ds.odr + " Hz. Windows = how many " + W + "-sample pieces (" + ds.cfg.minFileSec + " s) MEMS Studio cuts from them: one row of features each.";
+  }
+  function renderBendList() {
+    var h = '<table class="sum"><thead><tr><th>#</th><th>Person</th><th>Lean</th><th>Toward</th><th>Down</th><th>Hold</th><th>Up</th><th>Style</th><th></th></tr></thead><tbody>';
+    ds.bends.forEach(function (b, i) {
+      h += "<tr><td>" + b.no + "</td><td>" + b.person + "</td><td>" + b.angle.toFixed(1) + "°</td><td>" + dirText(b.dir) + "</td><td>" + b.down.toFixed(1) + " s</td><td>" + b.hold.toFixed(1) + " s</td><td>" + b.up.toFixed(1) + " s</td><td>" + b.style + '</td><td><button data-bend="' + i + '" aria-label="Play bend ' + b.no + '">▶</button></td></tr>';
+    });
+    $("ds-blist").innerHTML = h + "</tbody></table>";
+    $("ds-bcount").textContent = String(ds.bends.length);
+  }
+  function renderPersonSel() {
+    var se = $("ds-person"); se.innerHTML = "";
+    Object.keys(ds.personRange).forEach(function (id) { var r = ds.personRange[id], op = document.createElement("option"); op.value = id; op.textContent = "Person " + id + " · " + fmtDur((r[1] - r[0]) / ds.odr); se.appendChild(op); });
+    dsStripPer = 1; se.value = "1";
+  }
+  function renderExamples() {
+    var host = $("ds-ex"); host.innerHTML = "";
+    DSC.forEach(function (c, li) {
+      if (!ds.runs.some(function (r) { return r.lab === li; })) return;
+      var b = document.createElement("button"); b.className = "chip"; b.style.setProperty("--cc", "var(" + DS_TOK[li] + ")"); b.textContent = "▶ " + c;
+      b.addEventListener("click", function () { playExample(li); }); host.appendChild(b);
+    });
+  }
+  function renderSteps() {
+    var c = ds ? ds.cfg : dsCfg, W = Math.round(c.minFileSec * c.odr), gy = c.gyro !== false;
+    var steps = [
+      "Download the ZIP and unzip it. <code>mems_studio/</code> holds one folder per label: <code>still</code>, <code>bend</code>, <code>walking</code>, <code>jogging</code>, <code>running</code>, <code>other</code>.",
+      "In MEMS Studio, open the Machine Learning Core tool and pick the <b>LSM6DSV16X</b>.",
+      "Load every file from <code>mems_studio/bend</code>, select them all and give them the class <b>bend</b>. Do the same for each of the other folders, using the folder name as the class.",
+      "Set the MLC data rate to <b>" + c.odr + " Hz</b>, accelerometer full scale <b>4 g</b>" + (gy ? ", gyroscope <b>2000 dps</b>" : " (accelerometer only)") + ", and the window to <b>" + W + " samples</b>.",
+      "Features to start with: MEAN, VARIANCE and PEAK_TO_PEAK on Acc_X, Acc_Y, Acc_Z and Acc_V (the norm)" + (gy ? ", plus MEAN and VARIANCE on Gyr_V" : "") + ". Let it build the decision tree, then check the accuracy and which classes it mixes up.",
+      "Save the configuration (.ucf / .h). That file is what the firmware writes into the sensor to run the tree.",
+      "This data is simulated. Before you trust the tree, log real pendant data in the same format (same rate, same columns), add it, and train again."
+    ];
+    $("ds-steps").innerHTML = steps.map(function (s) { return "<li>" + s + "</li>"; }).join("");
+  }
+  function showFilePreview() {
+    if (!dsFiles) return;
+    var f = dsFiles.filter(function (x) { return x.path.indexOf("mems_studio/bend/") === 0; })[0] || dsFiles[0];
+    var lines = f.text.split("\n");
+    $("ds-fpath").textContent = f.path + " · " + (lines.length - 2) + " samples · tab separated. Every file in the ZIP looks like this.";
+    $("ds-file").textContent = lines.slice(0, 8).join("\n") + "\n…";
+  }
+
+  /* ---- playback in the 3D view ---- */
+  function bendRange(b) { var pad = Math.round(0.8 * ds.odr); return { i0: Math.round(b.start * ds.odr) - pad, i1: Math.round(b.end * ds.odr) + pad, title: "Bend #" + b.no + " of " + ds.bends.length }; }
+  function clampRange(r) {
+    var mid = Math.max(0, Math.min(ds.per.length - 1, Math.round((r.i0 + r.i1) / 2))), pr = ds.personRange[ds.per[mid]];
+    r.i0 = Math.max(pr[0], r.i0); r.i1 = Math.min(pr[1], r.i1); return r;
+  }
+  function startDsPlay(list, loop) {
+    if (!ds || !list.length) return;
+    stopData();
+    if (mode !== "seated") setMode("seated");
+    motion = null; lin.set(0, 0, 0);
+    list.forEach(clampRange);
+    dsPlay = { list: list, li: 0, t: list[0].i0, loop: !!loop };
+    dsClip = list[0].title; dsShownRun = null;
+    if (paused) togglePause();
+  }
+  function playBend(i) { if (ds && ds.bends[i]) startDsPlay([bendRange(ds.bends[i])], false); }
+  function playRandomBend() { if (ds && ds.bends.length) playBend(Math.floor(Math.random() * ds.bends.length)); }
+  function playAllBends() { if (ds) startDsPlay(ds.bends.map(bendRange), false); }
+  function playExample(li) {
+    var W = dsWindow(), cand = ds.runs.filter(function (r) { return r.lab === li && r.i1 - r.i0 >= W; });
+    if (!cand.length) cand = ds.runs.filter(function (r) { return r.lab === li; });
+    var rn = cand[Math.floor(Math.random() * cand.length)], pad = Math.round(0.6 * ds.odr);
+    startDsPlay([{ i0: rn.i0 - pad, i1: Math.min(rn.i1, rn.i0 + 12 * ds.odr) + pad, title: "Random " + DSC[li] + " example" }], false);
+  }
+  function playSession(p, from) {
+    var pr = ds.personRange[p]; if (!pr) return;
+    var i0 = from === undefined ? pr[0] : from;
+    startDsPlay([{ i0: i0, i1: pr[1], title: "Person " + p + ", whole session" }], false);
+  }
+  function stepDs(dt) {
+    var p = dsPlay, cur = p.list[p.li];
+    p.t += dt * ds.odr * dsSpeed;
+    if (p.t >= cur.i1 - 1) {
+      if (p.li < p.list.length - 1) { p.li++; cur = p.list[p.li]; p.t = cur.i0; dsClip = cur.title; }
+      else if (p.loop) p.t = cur.i0;
+      else { applyDs(cur.i1 - 1); dsPlay = null; dsClip += " · finished"; updateDsNow(); drawStripHead(); drawFan(); drawPlate(); return; }
+    }
+    applyDs(p.t);
+  }
+  function runAt(i) { var lo = 0, hi = dsRunStarts.length - 1; while (lo < hi) { var m = (lo + hi + 1) >> 1; if (dsRunStarts[m] <= i) lo = m; else hi = m - 1; } return ds.runs[lo]; }
+  var STILL_WORDS = { upright: "sitting upright", slouch: "slouching a little", phone: "looking down at a phone", leanback: "leaning back", drink: "drinking", talk: "talking, moving a little" };
+  var OTHER_WORDS = { floor: "bending to pick something off the floor (too deep for food)", side: "reaching to the side", stretch: "leaning back to stretch", turn: "turning in the chair", standup: "standing up", sitdown: "sitting down" };
+  function describeRun(rn, i) {
+    var inf = rn.info || {};
+    if (rn.lab === 1) return "leaning " + inf.angle.toFixed(1) + "° toward the plate, " + dirText(inf.dir) + " · down " + inf.down.toFixed(1) + " s, hold " + inf.hold.toFixed(1) + " s, up " + inf.up.toFixed(1) + " s" + (inf.style !== "normal" ? " (" + inf.style + ")" : "");
+    if (rn.lab >= 2 && rn.lab <= 4) return (inf.cadence ? inf.cadence.toFixed(1) + " steps per second" : "");
+    if (rn.lab === 5) return OTHER_WORDS[inf.kind] || "moving";
+    if (ds.truth.seat[i] < 0.5) return "standing still";
+    return STILL_WORDS[inf.kind] || "sitting";
+  }
+  function applyDs(t) {
+    var n = ds.lab.length, i = Math.max(0, Math.min(n - 1, Math.floor(t))), f = Math.max(0, t - i), j = Math.min(n - 1, i + 1), tr = ds.truth;
+    if (ds.per[j] !== ds.per[i]) { j = i; f = 0; }
+    function L(a) { return a[i] + (a[j] - a[i]) * f; }
+    var fwd = L(tr.fwd), side = L(tr.side), yaw = L(tr.yaw), hy = L(tr.hy), ii = f < 0.5 ? i : j;
+    q.copy(eq(IMUDS.torsoQuat(fwd, side, yaw)));
+    qMount.copy(eq(tr.qrel[i])).slerp(eq(tr.qrel[j]), f).multiply(Q_LC);
+    var standK = Math.max(0, Math.min(1, hy / 0.42));
+    rigPos.set(SEAT_HIP.x + K_M * L(tr.hx) + 0.15 * standK, SEAT_HIP.y + K_M * hy, SEAT_HIP.z + K_M * L(tr.hz) + 1.05 * standK);
+    camLiftTarget = standK;
+    bob.set(0, K_M * L(tr.bob), 0);
+    dataSample = { a: [ds.a[0][ii] / 1000, ds.a[1][ii] / 1000, ds.a[2][ii] / 1000], g: [ds.g[0][ii], ds.g[1][ii], ds.g[2][ii]] };
+    var lab = ds.lab[ii], per = ds.per[ii], rel = fwd - (dsBase[per] || 0);
+    poseLimbs(standK, L(tr.ph), lab, rel, yaw);
+    dsCur = ii; dsLean = { fwd: rel, side: side };
+    var rn = runAt(ii);
+    if (rn !== dsShownRun) {
+      dsShownRun = rn;
+      var name = DS_NAME[rn.lab] + (rn.lab === 1 && rn.info ? " #" + rn.info.no : ""), words = describeRun(rn, ii);
+      var bd = $("badge"); bd.hidden = false; bd.textContent = name; bd.style.background = "var(" + DS_TOK[rn.lab] + ")";
+      setCaption("Person " + per + ": " + (words || name.toLowerCase()) + ".");
+      dsWords = "<b>" + name + "</b>" + (words ? ": " + words : "") + ".";
+      if (rn.lab === 1 && rn.info) {
+        var b = rn.info.dir * Math.PI / 180;
+        targetRing.position.set(SEAT_HIP.x + 1.75 * Math.cos(b), -0.19, 1.75 * Math.sin(b)); targetRing.visible = true;
+      } else targetRing.visible = false;
+      if (per !== dsStripPer) { dsStripPer = per; $("ds-person").value = String(per); drawStrip(); }
+    }
+  }
+  var GAIT_SWING = { 2: [0.42, 0.55, 0.35], 3: [0.62, 0.95, 0.55], 4: [0.75, 1.25, 0.7] };   // walking / jogging / running: thigh, knee, arm (rad)
+  function poseLimbs(standK, ph, lab, rel, yaw) {
+    var sk = 1 - standK, gs = GAIT_SWING[lab] || [0, 0, 0], s = Math.sin(ph), H = Math.PI / 2;
+    legParts[0].thigh.rotation.z = sk * H + standK * gs[0] * s;
+    legParts[1].thigh.rotation.z = sk * H - standK * gs[0] * s;
+    legParts[0].knee.rotation.z = -sk * H - standK * gs[1] * Math.max(0, Math.sin(ph + 1.2));
+    legParts[1].knee.rotation.z = -sk * H - standK * gs[1] * Math.max(0, Math.sin(ph + 1.2 + Math.PI));
+    legs.rotation.y = standK * yaw * Math.PI / 180;
+    var reach = (lab === 1 || lab === 5) ? Math.max(0, Math.min(1, (rel - 6) / 22)) : 0;
+    arms[1].rotation.z = reach * 1.15 + standK * gs[2] * s;    // right hand to the food
+    arms[0].rotation.z = reach * 0.45 - standK * gs[2] * s;
+  }
+  function updateDsNow() {
+    if (!ds) return;
+    if (dsCur < 0) { $("ds-now").textContent = ""; return; }
+    var per = ds.per[dsCur], pr = ds.personRange[per];
+    $("ds-now").textContent = dsClip + " · person " + per + " · " + fmtDur((dsCur - pr[0]) / ds.odr) + " of " + fmtDur((pr[1] - pr[0]) / ds.odr) + (dsLean ? " · lean now " + Math.round(dsLean.fwd) + "°" : "");
+  }
+
+  /* ---- label strip ---- */
+  var stripBuf = document.createElement("canvas");
+  function drawStrip() {
+    var c = $("ds-strip"); if (!ds || !c.clientWidth) return;
+    var dpr = Math.min(window.devicePixelRatio || 1, 2), w = c.clientWidth, h = c.clientHeight;
+    stripBuf.width = Math.round(w * dpr); stripBuf.height = Math.round(h * dpr);
+    var g = stripBuf.getContext("2d"); g.setTransform(dpr, 0, 0, dpr, 0, 0);
+    var pr = ds.personRange[dsStripPer] || ds.personRange[1], a = pr[0], span = pr[1] - pr[0], cols = DS_TOK.map(tok);
+    g.fillStyle = tok("--paper"); g.fillRect(0, 0, w, h);
+    ds.runs.forEach(function (rn) {
+      if (rn.i1 <= a || rn.i0 >= pr[1]) return;
+      var x0 = (rn.i0 - a) / span * w, x1 = (rn.i1 - a) / span * w;
+      g.fillStyle = cols[rn.lab];
+      if (rn.lab === 0) g.fillRect(x0, h * 0.62, Math.max(1, x1 - x0), h * 0.38 - 3); else g.fillRect(x0, 3, Math.max(1, x1 - x0), h - 6);
+    });
+    drawStripHead();
+  }
+  function drawStripHead() {
+    var c = $("ds-strip"); if (!ds || !stripBuf.width) return;
+    if (c.width !== stripBuf.width || c.height !== stripBuf.height) { c.width = stripBuf.width; c.height = stripBuf.height; }
+    var g = c.getContext("2d"); g.setTransform(1, 0, 0, 1, 0, 0); g.drawImage(stripBuf, 0, 0);
+    var pr = ds.personRange[dsStripPer];
+    if (pr && dsCur >= pr[0] && dsCur < pr[1]) {
+      var k = c.width / (c.clientWidth || 1), x = (dsCur - pr[0]) / (pr[1] - pr[0]) * c.width;
+      g.fillStyle = tok("--ink"); g.fillRect(x - 1.5 * k, 0, 3 * k, c.height);
+    }
+  }
+
+  /* ---- charts ---- */
+  function prepCanvas(c) {
+    var dpr = Math.min(window.devicePixelRatio || 1, 2), w = c.clientWidth, h = c.clientHeight; if (!w || !h) return null;
+    if (c.width !== Math.round(w * dpr) || c.height !== Math.round(h * dpr)) { c.width = Math.round(w * dpr); c.height = Math.round(h * dpr); }
+    var g = c.getContext("2d"); g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, w, h);
+    g.font = "11px 'IBM Plex Mono', monospace"; g.textBaseline = "middle"; return { g: g, w: w, h: h };
+  }
+  function rgba(hex, a) { var m = /^#([0-9a-f]{6})$/i.exec(hex); if (!m) return hex; var n = parseInt(m[1], 16); return "rgba(" + (n >> 16 & 255) + "," + (n >> 8 & 255) + "," + (n & 255) + "," + a + ")"; }
+  function drawDsCharts() { if (!ds) return; drawFan(); drawHist(); drawPlate(); }
+  function drawFan() {
+    var cv = prepCanvas($("ds-fan")); if (!cv) return;
+    var g = cv.g, w = cv.w, h = cv.h, c = dsCfg, px = w * 0.42, py = h - 18, R = Math.min(h - 46, w * 0.42);
+    function pt(deg, r) { var a = deg * Math.PI / 180; return [px + r * Math.sin(a), py - r * Math.cos(a)]; }
+    function wedge(a0, a1, col, label, lr) {
+      g.fillStyle = rgba(col, 0.18); g.beginPath(); g.moveTo(px, py);
+      for (var d = a0; d <= a1 + 0.001; d += Math.max(0.5, (a1 - a0) / 40)) { var p = pt(d, R); g.lineTo(p[0], p[1]); }
+      var e = pt(a1, R); g.lineTo(e[0], e[1]); g.closePath(); g.fill();
+      g.strokeStyle = rgba(col, 0.55); g.lineWidth = 1;
+      [a0, a1].forEach(function (d) { var p = pt(d, R); g.beginPath(); g.moveTo(px, py); g.lineTo(p[0], p[1]); g.stroke(); });
+      if (label) { var m = pt((a0 + a1) / 2, R * lr); g.fillStyle = col; g.textAlign = "center"; g.font = "600 12px 'IBM Plex Sans', sans-serif"; g.fillText(label, m[0], m[1]); g.font = "11px 'IBM Plex Mono', monospace"; }
+    }
+    var cS = tok("--c-still"), cB = tok("--c-bend"), cO = tok("--c-other"), mut = tok("--muted");
+    wedge(-35, -22, cO, "stretch", 0.66);
+    wedge(-16, -5, cS, "back", 0.74);
+    wedge(-5, c.stillLeanMax, cS, "", 0);
+    wedge(c.bendMin, c.bendMax, cB, "BEND", 0.64);
+    wedge(55, 85, cO, "floor", 0.72);
+    if (ds) {
+      g.strokeStyle = rgba(cB, 0.7); g.lineWidth = 1.2;
+      ds.bends.forEach(function (b) { var p0 = pt(b.angle, R + 2), p1 = pt(b.angle, R + 10); g.beginPath(); g.moveTo(p0[0], p0[1]); g.lineTo(p1[0], p1[1]); g.stroke(); });
+    }
+    g.fillStyle = mut; g.textAlign = "center";
+    [[0, "0°"], [c.bendMin, c.bendMin + "°"], [c.bendMax, c.bendMax + "°"], [90, "90°"], [-35, "−35°"]].forEach(function (p) { var q2 = pt(p[0], R + 20); g.fillText(p[1], q2[0], q2[1]); });
+    g.textAlign = "right"; g.fillText("table →", w - 6, 12);
+    g.fillStyle = tok("--wood"); g.fillRect(px - 34, py + 1, 40, 4);
+    if (dsLean && dsCur >= 0) {
+      var tip = pt(dsLean.fwd, R * 0.9);
+      g.strokeStyle = tok("--ink"); g.lineWidth = 4; g.lineCap = "round"; g.beginPath(); g.moveTo(px, py); g.lineTo(tip[0], tip[1]); g.stroke(); g.lineCap = "butt";
+      g.fillStyle = tok("--ink"); g.beginPath(); g.arc(tip[0], tip[1], 6, 0, Math.PI * 2); g.fill();
+    }
+  }
+  function drawHist() {
+    var cv = prepCanvas($("ds-hist")); if (!cv || !ds) return;
+    var g = cv.g, w = cv.w, h = cv.h, c = ds.cfg, lo = c.bendMin, hi = c.bendMax, cB = tok("--c-bend"), mut = tok("--muted");
+    var nb = Math.max(5, Math.min(16, Math.round((hi - lo) / 2))), cnt = []; for (var k = 0; k < nb; k++) cnt.push(0);
+    ds.bends.forEach(function (b) { cnt[Math.min(nb - 1, Math.max(0, Math.floor((b.angle - lo) / (hi - lo || 1) * nb)))]++; });
+    var mx = Math.max.apply(null, cnt) || 1, L = 30, Rr = w - 10, top = 14, bot = h - 24, bw = (Rr - L) / nb;
+    g.strokeStyle = tok("--line"); g.lineWidth = 1; g.beginPath(); g.moveTo(L, bot + 0.5); g.lineTo(Rr, bot + 0.5); g.moveTo(L, top); g.lineTo(Rr, top); g.stroke();
+    g.fillStyle = rgba(cB, 0.85);
+    cnt.forEach(function (v, i) { var bh = v / mx * (bot - top); g.fillRect(L + i * bw + 1, bot - bh, Math.max(1, bw - 2), bh); });
+    var mean = ds.bends.reduce(function (s, b) { return s + b.angle; }, 0) / (ds.bends.length || 1), xm = L + (mean - lo) / (hi - lo || 1) * (Rr - L);
+    g.strokeStyle = tok("--ink"); g.setLineDash([4, 3]); g.beginPath(); g.moveTo(xm, top); g.lineTo(xm, bot); g.stroke(); g.setLineDash([]);
+    g.fillStyle = mut; g.textAlign = "right"; g.fillText(String(mx), L - 4, top); g.fillText("0", L - 4, bot);
+    g.textAlign = "center"; g.fillText(lo + "°", L, bot + 13); g.fillText(hi + "°", Rr, bot + 13); g.fillText("avg " + mean.toFixed(1) + "°", Math.max(L + 30, Math.min(Rr - 30, xm)), bot + 13);
+  }
+  function drawPlate() {
+    var cv = prepCanvas($("ds-plate")); if (!cv || !ds) return;
+    var g = cv.g, w = cv.w, h = cv.h, c = ds.cfg, px = w / 2, py = h - 16, R = Math.min(h - 32, w / 2 - 16), maxA = Math.max(40, Math.ceil(c.bendMax / 10) * 10);
+    var cB = tok("--c-bend"), mut = tok("--muted"), line = tok("--line"), sp = c.plateSpread * Math.PI / 180;
+    g.strokeStyle = line; g.lineWidth = 1; g.fillStyle = mut; g.textAlign = "left";
+    for (var a = 10; a <= maxA; a += 10) { var rr = a / maxA * R; g.beginPath(); g.arc(px, py, rr, -Math.PI / 2 - 1.2, -Math.PI / 2 + 1.2); g.stroke(); if (a % 20 === 0 || a === maxA) g.fillText(a + "°", px + 3, py - rr - 6); }
+    g.setLineDash([4, 3]); [-sp, sp].forEach(function (b) { g.beginPath(); g.moveTo(px, py); g.lineTo(px + R * Math.sin(b), py - R * Math.cos(b)); g.stroke(); }); g.setLineDash([]);
+    var cur = dsShownRun && dsShownRun.lab === 1 ? dsShownRun.info : null;
+    ds.bends.forEach(function (b) {
+      var r = b.angle / maxA * R, t = b.dir * Math.PI / 180;
+      g.fillStyle = rgba(cB, 0.7); g.beginPath(); g.arc(px + r * Math.sin(t), py - r * Math.cos(t), 3, 0, Math.PI * 2); g.fill();
+    });
+    if (cur) { var r2 = cur.angle / maxA * R, t2 = cur.dir * Math.PI / 180; g.strokeStyle = tok("--ink"); g.lineWidth = 2; g.beginPath(); g.arc(px + r2 * Math.sin(t2), py - r2 * Math.cos(t2), 7, 0, Math.PI * 2); g.stroke(); }
+    g.fillStyle = tok("--wood"); g.fillRect(px - 12, py + 2, 24, 8);
+    g.fillStyle = mut; g.textAlign = "left"; g.fillText("← left", 6, h - 8); g.textAlign = "right"; g.fillText("right →", w - 6, h - 8);
+    g.textAlign = "center"; g.fillText("table ↑", px, 10);
+  }
+
+  /* ---- downloads (the downloads capability; absent outside Claude) ---- */
+  var dlApi = null, dlBusy = false;
+  function dlUnavailable() { dlApi = null; $("ds-dl").hidden = true; $("ds-dlnote").textContent = "Downloads are not available in this view. Open the playground in Claude to save the files."; }
+  (function () {
+    var p = null;
+    try { p = window.claude && typeof window.claude.use === "function" ? window.claude.use("downloads") : null; } catch (e) { p = null; }
+    if (!p) { dlUnavailable(); return; }
+    Promise.resolve(p).then(function (api) { if (!api) { dlUnavailable(); return; } dlApi = api; $("ds-dl").hidden = false; $("ds-dlnote").textContent = "Each download asks you to confirm."; if (!window.JSZip) $("ds-zip").hidden = true; }, dlUnavailable);
+  })();
+  function getFiles() { if (!dsFiles) dsFiles = IMUDS.toFiles(ds); return dsFiles; }
+  function zipName() { return "ignia_bend_dataset_seed" + ds.cfg.seed + "_" + ds.odr + "hz"; }
+  function dlSave(btn, filename, prepare) {
+    if (!dlApi || !ds || dlBusy) return;
+    dlBusy = true; btn.disabled = true; var note = $("ds-dlnote"); note.textContent = "Preparing " + filename + "…";
+    function done() { dlBusy = false; btn.disabled = false; }
+    var data;
+    Promise.resolve().then(prepare).then(function (d) { data = d; }, function (e) { note.textContent = "Could not prepare the file: " + (e && e.message ? e.message : e); data = null; })
+      .then(function () {
+        if (data === null || data === undefined) { done(); return; }
+        note.textContent = "Confirm the download to save " + filename + ".";
+        return dlApi.save({ filename: filename, data: data }).then(function () { note.textContent = "Saved " + filename + "."; }, function (e) {
+          var c = e && e.code;
+          if (c === "declined") note.textContent = "Download cancelled.";
+          else if (c === "rate_limited") note.textContent = "A download prompt is already open, or there were several in a row. Try again in a moment.";
+          else if (c === "too_large") note.textContent = "That file is too large to save here. Use fewer people or minutes and generate again.";
+          else if (c === "rejected_extension" || c === "extension_not_enabled") note.textContent = "This file type cannot be saved in this view.";
+          else if (c === "bad_request" || c === "transform_error") note.textContent = "The file could not be handed over (" + (e.message || c) + ").";
+          else dlUnavailable();
+        }).then(done);
+      });
+  }
+
+  /* ---- wiring ---- */
+  function enterDataset() {
+    if (mode !== "seated") { stopData(); setMode("seated"); }
+    if (!ds && !dsBusy) dsGenerate();
+    setTimeout(function () { drawFan(); drawDsCharts(); drawStrip(); }, 0);
+  }
+  function initDataset() {
+    buildDsFields(); renderSteps();
+    $("ds-gen").addEventListener("click", dsGenerate);
+    $("ds-gen2").addEventListener("click", function () { dsGenerate(); $("ds-gen").scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: "center" }); });
+    $("ds-new").addEventListener("click", function () { dsCfg.seed = 1 + Math.floor(Math.random() * 999998); writeDsFields(); store("dscfg", dsCfg); dsGenerate(); });
+    document.querySelectorAll("[data-size]").forEach(function (b) { b.addEventListener("click", function () { Object.assign(dsCfg, SIZE_PRESETS[b.getAttribute("data-size")]); writeDsFields(); dsChanged(); }); });
+    document.querySelectorAll("[data-angles]").forEach(function (b) { b.addEventListener("click", function () { Object.assign(dsCfg, ANGLE_PRESETS[b.getAttribute("data-angles")]); writeDsFields(); dsChanged(); }); });
+    $("ds-defaults").addEventListener("click", function () { dsCfg = IMUDS.defaults(); writeDsFields(); dsChanged(); });
+    $("ds-rand").addEventListener("click", playRandomBend);
+    $("ds-all").addEventListener("click", playAllBends);
+    $("ds-stop").addEventListener("click", function () { stopData(); syncBoardPrev(); });
+    $("ds-speed").addEventListener("change", function () { dsSpeed = +this.value; });
+    $("ds-person").addEventListener("change", function () { dsStripPer = +this.value; drawStrip(); });
+    $("ds-sess").addEventListener("click", function () { playSession(dsStripPer); });
+    $("ds-strip").addEventListener("click", function (e) {
+      if (!ds) return; var rect = this.getBoundingClientRect(), pr = ds.personRange[dsStripPer];
+      var i = pr[0] + Math.floor(Math.max(0, Math.min(0.999, (e.clientX - rect.left) / rect.width)) * (pr[1] - pr[0]));
+      startDsPlay([{ i0: i, i1: pr[1], title: "Person " + dsStripPer + " from " + fmtDur((i - pr[0]) / ds.odr) }], false);
+    });
+    $("ds-blist").addEventListener("click", function (e) { var b = e.target.closest("[data-bend]"); if (b) { playBend(+b.getAttribute("data-bend")); view.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: "nearest" }); } });
+    $("ds-zip").addEventListener("click", function () {
+      dlSave(this, zipName() + ".zip", function () {
+        if (!window.JSZip) throw new Error("the ZIP library did not load");
+        var z = new window.JSZip(), root = zipName() + "/";
+        getFiles().forEach(function (f) { z.file(root + f.path, f.text); });
+        return z.generateAsync({ type: "blob", compression: "DEFLATE", compressionOptions: { level: 6 } });
+      });
+    });
+    $("ds-csv").addEventListener("click", function () { dlSave(this, zipName() + "_all_samples_labelled.csv", function () { return getFiles().filter(function (f) { return f.path === "all_samples_labelled.csv"; })[0].text; }); });
+    $("ds-bcsv").addEventListener("click", function () { dlSave(this, zipName() + "_bends.csv", function () { return getFiles().filter(function (f) { return f.path === "bends.csv"; })[0].text; }); });
+    if (window.ResizeObserver) { new ResizeObserver(function () { drawDsCharts(); drawFan(); }).observe($("ds-fan")); new ResizeObserver(drawStrip).observe($("ds-strip")); }
+  }
+
+  /* ---------------- ui wiring ---------------- */
+  var TABS = ["learn", "play", "dataset", "missions", "data"];
+  function selectTab(name) {
+    TABS.forEach(function (t) { var on = t === name; $("t-" + t).setAttribute("aria-selected", String(on)); $("p-" + t).hidden = !on; });
+    store("tab", name); drawCharts();
+    if (name === "dataset") enterDataset();
+  }
+  TABS.forEach(function (t) { $("t-" + t).addEventListener("click", function () { selectTab(t); }); });
+
+  function togglePause() { paused = !paused; $("pause").textContent = paused ? "Resume" : "Pause"; $("pause").setAttribute("aria-pressed", String(paused)); if (paused) setCaption("Paused. Read the numbers, then press Resume."); }
+  $("pause").addEventListener("click", togglePause);
+  $("reset").addEventListener("click", function () { stopData(); setMode(mode); });
+  $("mode-board").addEventListener("click", function () { stopData(); setMode("board"); });
+  $("mode-person").addEventListener("click", function () { stopData(); setMode("person"); });
+
+  var POSE_TEXT = { flat: "Flat with the chip facing up: Z up, so Z reads +1 g.", down: "Upside down: Z points down, so Z reads −1 g.", xup: "On an edge with X up: X takes the 1 g.", yup: "On an edge with Y up: Y takes the 1 g.", log: "Your first log: ax 7060, ay 590, az −3945 counts. X mostly up, Z tipped down." };
+  document.querySelectorAll("[data-pose]").forEach(function (b) { b.addEventListener("click", function () { var p = b.getAttribute("data-pose"); run(mSeq([mCap(p === "home" ? HOMES[homeKey].text : POSE_TEXT[p]), mPose(POSES[p], 1.1)])); }); });
+  document.querySelectorAll("[data-spin]").forEach(function (b) { b.addEventListener("click", function () {
+    var s = b.getAttribute("data-spin"), neg = s.charAt(0) === "-", ax = neg ? s.slice(1) : s;
+    run(mSeq([mCap("Turning around " + ax.toUpperCase() + " at " + (neg ? "−" : "+") + "60 °/s for 1.5 s."), mSpin(ax, neg ? -90 : 90, 1.5), mCap("Stopped. Gyro back to 0, the board stays where it ended up.")]));
+  }); });
+  $("b-shake").addEventListener("click", function () { run(mSeq([mCap("Shaking: the total jumps away from 1 g."), mShake(1.6), mCap("Still again: 1.00 g.")])); });
+  $("b-drop").addEventListener("click", function () { run(mDrop()); });
+  document.querySelectorAll("[data-act]").forEach(function (b) { b.addEventListener("click", function () { run(ACTS[b.getAttribute("data-act")]()); }); });
+
+  var sliders = { tip: $("s-tip"), roll: $("s-roll"), turn: $("s-turn") }, sliderBusy = false;
+  /* sliders tilt the board around the screen's own directions, starting from Home */
+  function fromSliders() {
+    var e = new T.Euler(+sliders.tip.value * Math.PI / 180, +sliders.turn.value * Math.PI / 180, +sliders.roll.value * Math.PI / 180, "YXZ");
+    var qe = new T.Quaternion().setFromEuler(e);
+    q.copy(Q_VIEW).multiply(qe).multiply(Q_VIEW.clone().invert()).multiply(Q_HOME);
+    showSliderValues();
+  }
+  function showSliderValues() { $("o-tip").textContent = sliders.tip.value + "°"; $("o-roll").textContent = sliders.roll.value + "°"; $("o-turn").textContent = sliders.turn.value + "°"; }
+  Object.keys(sliders).forEach(function (k) {
+    var s = sliders[k];
+    s.addEventListener("pointerdown", function () { sliderBusy = true; });
+    s.addEventListener("pointerup", function () { sliderBusy = false; });
+    s.addEventListener("input", function () { motion = null; stopData(); lin.set(0, 0, 0); bob.set(0, 0, 0); if (paused) togglePause(); fromSliders(); setCaption("Moving the sliders: the gyro shows how fast you move them, the accelerometer shows where it ends up."); });
+    s.addEventListener("change", function () { sliderBusy = false; });
+  });
+  function syncSliders() {
+    if (sliderBusy || mode !== "board") return;
+    var qe = Q_VIEW.clone().invert().multiply(q).multiply(Q_HOME.clone().invert()).multiply(Q_VIEW);
+    var e = new T.Euler().setFromQuaternion(qe, "YXZ");
+    sliders.tip.value = Math.round(e.x * 180 / Math.PI); sliders.turn.value = Math.round(e.y * 180 / Math.PI); sliders.roll.value = Math.round(e.z * 180 / Math.PI);
+    showSliderValues();
+  }
+
+  var homeSel = $("home-pose"); homeSel.value = homeKey;
+  homeSel.addEventListener("change", function () {
+    homeKey = homeSel.value; store("home", homeKey); Q_HOME.copy(HOMES[homeKey].q);
+    if (mode === "board") run(mSeq([mCap(HOMES[homeKey].text), mPose(Q_HOME, 1.0)]));
+    renderMissions();
+  });
+  $("acc-range").addEventListener("change", function () { accRange = +this.value; updateFoot(); });
+  $("gyr-range").addEventListener("change", function () { gyrRange = +this.value; updateFoot(); });
+  $("c-ball").addEventListener("change", function () { ballBox.visible = this.checked; });
+  $("c-grav").addEventListener("change", function () { gravArrow.visible = gravLab.visible = this.checked; });
+  var showRead = true; $("c-read").addEventListener("change", function () { showRead = this.checked; });
+  $("m-reset").addEventListener("click", function () { done = {}; store("missions", done); renderMissions(); });
+  $("d-play").addEventListener("click", startData);
+  $("d-stop").addEventListener("click", function () { stopData(); syncBoardPrev(); });
+
+  /* drag to turn */
+  var drag = null;
+  view.addEventListener("pointerdown", function (e) {
+    if (e.target.closest("button")) return;
+    if (mode === "seated") { drag = { x: e.clientX, y: e.clientY, cam: true }; view.setPointerCapture(e.pointerId); return; }
+    drag = { x: e.clientX, y: e.clientY }; motion = null; stopData(); lin.set(0, 0, 0); bob.set(0, 0, 0); if (paused) togglePause();
+    setCaption("You are turning it. The gyro shows how fast; let go and the accelerometer shows where it ended up.");
+    view.setPointerCapture(e.pointerId);
+  });
+  view.addEventListener("pointermove", function (e) {
+    if (!drag) return;
+    var dx = e.clientX - drag.x, dy = e.clientY - drag.y; drag.x = e.clientX; drag.y = e.clientY;
+    if (drag.cam) { camAz -= dx * 0.008; camEl = Math.max(-0.05, Math.min(1.2, camEl + dy * 0.006)); resize(); return; }
+    var right = new T.Vector3(1, 0, 0).applyQuaternion(camera.quaternion);
+    q.premultiply(new T.Quaternion().setFromAxisAngle(UP, dx * 0.012)).premultiply(new T.Quaternion().setFromAxisAngle(right, dy * 0.012));
+  });
+  function endDrag() { drag = null; }
+  view.addEventListener("pointerup", endDrag); view.addEventListener("pointercancel", endDrag);
+
+  /* ---------------- loop ---------------- */
+  var lastT = performance.now(), sinceUi = 0, sinceChart = 0;
+  var tmpV = new T.Vector3();
+  function frame(now) {
+    var dt = Math.min(0.05, Math.max(0.0001, (now - lastT) / 1000)); lastT = now;
+    if (!paused) {
+      clock += dt;
+      if (dsPlay) stepDs(dt);
+      else if (play) stepData(dt);
+      else if (motion) { lin.set(0, 0, 0); if (motion.step(dt)) motion = null; }
+
+      var qB = boardWorldQuat();
+      if (!dataSample) {
+        var dq = qBoardPrev.clone().invert().multiply(qB);
+        if (dq.w < 0) { dq.x = -dq.x; dq.y = -dq.y; dq.z = -dq.z; dq.w = -dq.w; }
+        var w = Math.min(1, dq.w), ang = 2 * Math.acos(w), s = Math.sqrt(Math.max(0, 1 - w * w));
+        var om = s < 1e-7 ? new T.Vector3() : new T.Vector3(dq.x / s, dq.y / s, dq.z / s).multiplyScalar(ang / dt * 180 / Math.PI);
+        gyroTrue = localToChip(om);
+        for (var i = 0; i < 3; i++) { gyroShown[i] += 0.35 * (gyroTrue[i] - gyroShown[i]); if (Math.abs(gyroShown[i]) < 0.3 && Math.abs(gyroTrue[i]) < 0.3) gyroShown[i] = 0; }
+        accTrue = localToChip(UP.clone().add(lin).applyQuaternion(qB.clone().invert()));
+      }
+      qBoardPrev.copy(qB);
+
+      rig.quaternion.copy(q); rig.position.copy(rigPos).add(bob);
+      mount.quaternion.copy(qMount);
+      if (mode === "seated") { legs.position.copy(rig.position); if (Math.abs(camLiftTarget - camLift) > 1e-3) { camLift += (camLiftTarget - camLift) * Math.min(1, dt * 2.5); placeSeatedCamera(); } }
+      scene.updateMatrixWorld();
+
+      var r = readings();
+      accPast.push({ t: clock, a: r.a }); while (accPast.length && clock - accPast[0].t > 0.4) accPast.shift();
+      history.push({ t: clock, a: r.a, g: r.g }); while (history.length && clock - history[0].t > 10.5) history.shift();
+
+      /* ball in a box: pushed opposite to the reading, springs to each wall */
+      var readLocal = chipToLocal(r.a);
+      var disp = readLocal.clone().multiplyScalar(-0.16); if (disp.length() > 0.27) disp.setLength(0.27);
+      ball.position.copy(disp);
+      var arr = springGeo.attributes.position.array;
+      for (var f = 0; f < 6; f++) { arr[f * 6] = disp.x; arr[f * 6 + 1] = disp.y; arr[f * 6 + 2] = disp.z; arr[f * 6 + 3] = FACES[f][0]; arr[f * 6 + 4] = FACES[f][1]; arr[f * 6 + 5] = FACES[f][2]; }
+      springGeo.attributes.position.needsUpdate = true;
+
+      /* reading arrow in the room */
+      chip.getWorldPosition(tmpV);
+      var rWorld = new T.Vector3(r.a[0], r.a[2], -r.a[1]).applyQuaternion(qB);
+      var len = rWorld.length(), k = mode !== "board" ? 0.55 : 1.3;
+      readArrow.position.copy(tmpV);
+      if (showRead && len > 0.06) {
+        readArrow.visible = readLab.visible = true;
+        readArrow.setDirection(rWorld.clone().normalize()); readArrow.setLength(Math.min(3.2, k * len), 0.2, 0.13);
+        readLab.position.copy(tmpV).add(rWorld.clone().normalize().multiplyScalar(Math.min(3.2, k * len) + 0.3));
+      } else { readArrow.visible = readLab.visible = false; }
+
+      checkMissions(r, dt);
+      sinceUi += dt; sinceChart += dt;
+      if (sinceUi > 0.033) { updateReadouts(r); syncSliders(); if (mode === "seated") updateDsNow(); sinceUi = 0; }
+      if (sinceChart > 0.05) { drawCharts(); if (dsPlay) { drawFan(); drawPlate(); drawStripHead(); } sinceChart = 0; }
+    }
+    renderer.render(scene, camera);
+    requestAnimationFrame(frame);
+  }
+
+  /* ---------------- start ---------------- */
+  applyTheme();
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(applyTheme);
+  if (window.matchMedia) { var mq = window.matchMedia("(prefers-color-scheme: dark)"); if (mq.addEventListener) mq.addEventListener("change", applyTheme); }
+  new MutationObserver(applyTheme).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+  if (window.ResizeObserver) { new ResizeObserver(resize).observe(view); new ResizeObserver(drawCharts).observe($("chart-a")); } else window.addEventListener("resize", function () { resize(); drawCharts(); });
+  initDataset();
+  setMode(STEPS[stepIdx].mode);
+  renderStep(); renderMissions(); updateFoot(); showSliderValues();
+  var savedTab = store("tab"); selectTab(TABS.indexOf(savedTab) >= 0 ? savedTab : "learn");
+  updateReadouts(readings());
+  requestAnimationFrame(frame);
+})();
+</script>
+
+</body></html>
